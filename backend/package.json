@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "dev:e2e": "cross-env NODE_ENV=test DATABASE_URL=file:./dev-test-e2e.db prisma generate && cross-env NODE_ENV=test DATABASE_URL=file:./dev-test-e2e.db prisma db push --force-reset && ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:e2e": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset && ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p .",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
@@ -12,10 +12,10 @@
     "db:seed": "ts-node --transpileOnly prisma/seed.ts",
     "db:push": "prisma db push",
     "db:reset": "prisma migrate reset --force && prisma db seed",
-    "pretest": "cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db prisma generate && cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db prisma db push --force-reset",
-    "pretest:watch": "cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db prisma generate && cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db prisma db push --force-reset",
-    "test": "cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db vitest run test/api.test.ts && cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db vitest run test/more.test.ts",
-    "test:watch": "cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db vitest test/api.test.ts & cross-env NODE_ENV=test DATABASE_URL=file:./dev-test.db vitest test/more.test.ts"
+    "pretest": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset",
+    "pretest:watch": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset",
+    "test": "cross-env NODE_ENV=test vitest run test/api.test.ts && cross-env NODE_ENV=test vitest run test/more.test.ts",
+    "test:watch": "cross-env NODE_ENV=test vitest test/api.test.ts & cross-env NODE_ENV=test vitest test/more.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

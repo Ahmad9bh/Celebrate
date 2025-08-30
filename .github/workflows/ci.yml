@@ -24,8 +24,9 @@ jobs:
 
       - name: Run tests
         env:
-          # Ensure prisma uses a dedicated test DB file inside backend during tests
-          DATABASE_URL: file:./dev-test.db
+          # Use Neon TEST database (direct URLs) for Prisma migrate and tests
+          DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
+          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}
         run: npm test
 
   e2e-frontend:
@@ -48,6 +49,9 @@ jobs:
 
       - name: Run E2E tests (starts servers automatically)
         env:
+          # Backend DB for the webServer-started backend
+          DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
+          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}
           JWT_SECRET: dev-secret
           USE_MOCK_STRIPE: "1"
           NEXT_PUBLIC_API_BASE: http://localhost:4000
