@@ -1,0 +1,20 @@
+node_modules
+node_modules
+
+# Env files
+.env
+backend/.env
+frontend/.env.local
+
+# Build artifacts
+backend/dist/
+frontend/.next/
+frontend/out/
+
+# Logs and coverage
+*.log
+coverage/
+
+# Playwright reports
+frontend/playwright-report/
+frontend/test-results/
