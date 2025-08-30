@@ -28,7 +28,9 @@ export default defineConfig({
         ALLOWED_ORIGINS: 'http://localhost:3000',
         STRIPE_SECRET_KEY: 'sk_test_mock',
         STRIPE_WEBHOOK_SECRET: 'whsec_mock',
-        DATABASE_URL: 'file:./dev-test-e2e.db',
+        // Expect DATABASE_URL/SHADOW_DATABASE_URL to be provided by the shell/CI for Postgres
+        DATABASE_URL: process.env.DATABASE_URL || '',
+        SHADOW_DATABASE_URL: process.env.SHADOW_DATABASE_URL || '',
         PORT: '4000',
       },
     },
