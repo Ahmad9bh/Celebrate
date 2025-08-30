@@ -183,13 +183,14 @@ app.get('/api/auth/me', auth(['user','owner','admin']), async (req: any, res) =>
 });
 
 // Venues search/filter with validated query params
+const asOptionalNonEmpty = (schema: z.ZodTypeAny) => z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
 const VenueQuerySchema = z.object({
-  city: z.string().min(1).optional(),
-  q: z.string().min(1).optional(),
+  city: asOptionalNonEmpty(z.string().min(1)),
+  q: asOptionalNonEmpty(z.string().min(1)),
   minCap: z.coerce.number().int().nonnegative().optional(),
   maxCap: z.coerce.number().int().nonnegative().optional(),
-  amenity: z.string().min(1).optional(),
-  eventType: z.string().min(1).optional(),
+  amenity: asOptionalNonEmpty(z.string().min(1)),
+  eventType: asOptionalNonEmpty(z.string().min(1)),
 });
 app.get('/api/venues', async (req, res) => {
   const parsed = VenueQuerySchema.safeParse(req.query);

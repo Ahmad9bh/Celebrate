@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:e2e": "cross-env NODE_ENV=test DATABASE_URL=file:./dev-test-e2e.db prisma generate && cross-env NODE_ENV=test DATABASE_URL=file:./dev-test-e2e.db prisma db push --force-reset && ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p .",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
