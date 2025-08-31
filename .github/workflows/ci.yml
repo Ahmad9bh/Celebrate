@@ -28,9 +28,8 @@ jobs:
           echo "--- backend/prisma/ ---"
           ls -la backend/prisma || true
 
-      - name: Install backend dependencies only
-        working-directory: backend
-        run: npm ci
+      - name: Install backend dependencies (workspace)
+        run: npm ci --workspace backend --include-workspace-root
 
       - name: Run Prisma migrations (deploy)
         working-directory: backend
