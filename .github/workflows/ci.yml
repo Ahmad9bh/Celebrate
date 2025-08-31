@@ -19,7 +19,13 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install dependencies (workspaces)
+      - name: Show repo root contents (debug)
+        run: |
+          pwd
+          ls -la
+
+      - name: Install backend dependencies only
+        working-directory: backend
         run: npm ci
 
       - name: Run Prisma migrations (deploy)
