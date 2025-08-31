@@ -31,6 +31,17 @@ jobs:
       - name: Install backend dependencies (workspace)
         run: npm ci --workspace backend --include-workspace-root
 
+      - name: Install backend dependencies only
+        working-directory: backend
+        run: npm ci
+
+      - name: Check DATABASE_URL provided
+        run: |
+          if [ -z "${{ secrets.PG_TEST_DATABASE_URL }}" ]; then
+            echo "PG_TEST_DATABASE_URL is not set in repo secrets."
+            exit 1
+          fi
+
       - name: Run Prisma migrations (deploy)
         working-directory: backend
         env:
