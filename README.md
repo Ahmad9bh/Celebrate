@@ -65,3 +65,26 @@ EXPO_PUBLIC_DEFAULT_LANG=en
 - Data is in-memory for now via `backend/src/seed.ts`.
 - Replace payment stubs with real Stripe + local gateways later.
 - Designed for UK + Gulf first; currencies and locales are configurable.
+
+## Local Development Setup
+
+### Backend
+```bash
+cd backend
+npm ci
+npx prisma generate
+npx prisma migrate deploy
+npm test
+```
+
+### Frontend
+```bash
+cd frontend
+npm ci
+# Install Playwright browsers (first run only)
+npx playwright install
+# Run E2E tests
+npm run test:e2e
+```
+
+Note: Run each block from the indicated directory (`backend/` or `frontend/`). The Prisma commands only apply to the backend.
