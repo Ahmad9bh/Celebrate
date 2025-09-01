@@ -1,0 +1,21 @@
+{
+  "name": "celebrate",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
+    "test": "npm run test --workspace backend",
+    "test:watch": "npm run test:watch --workspace backend",
+    "test:e2e": "npm run test:e2e --workspace frontend",
+    "test:e2e:ui": "npm run test:e2e:ui --workspace frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

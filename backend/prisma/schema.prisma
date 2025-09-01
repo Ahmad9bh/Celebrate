@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id    String @id
+  role  String // was enum Role; using string for SQLite compatibility
+  name  String
+  email String @unique
+
+  bookings Booking[]
+  venues   Venue[] @relation("OwnerVenues")
+}
+
+model Venue {
+  id          String @id
+  name        String
+  city        String
+  country     String
+  capacity    Int
+  amenities   String // JSON stringified array
+  eventTypes  String // JSON stringified array
+  images      String // JSON stringified array
+  description String
+  basePrice   Int // stored as whole GBP in seed; API handles display/formatting
+  ownerId     String
+  rating      Float
+
+  owner   User   @relation("OwnerVenues", fields: [ownerId], references: [id])
+  bookings Booking[]
+}
+
+model Booking {
+  id            String @id
+  userId        String
+  venueId       String
+  date          DateTime
+  guests        Int
+  status        String // was enum BookingStatus; using string for SQLite compatibility
+  totalPriceGBP Int
+
+  user  User  @relation(fields: [userId], references: [id])
+  venue Venue @relation(fields: [venueId], references: [id])
+}
