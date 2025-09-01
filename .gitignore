@@ -18,3 +18,5 @@ coverage/
 # Playwright reports
 frontend/playwright-report/
 frontend/test-results/
+
+backend/prisma/*.db
