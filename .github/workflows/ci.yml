@@ -51,6 +51,7 @@ jobs:
           npx -y prisma@5.22.0 migrate deploy --schema prisma/schema.prisma
 
   backend-tests:
+    if: ${{ hashFiles('backend/test/**/*.ts') != '' }}
     needs: [migrations]
     runs-on: ubuntu-latest
     steps:
@@ -73,6 +74,7 @@ jobs:
         run: npm test
 
   e2e-frontend:
+    if: ${{ hashFiles('frontend/package.json') != '' }}
     needs: [migrations]
     runs-on: ubuntu-latest
     steps:
