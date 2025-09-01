@@ -16,12 +16,13 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npm run dev:e2e --workspace backend',
+      command: 'npm run dev:e2e',
       cwd: '../backend',
       port: 4000,
       reuseExistingServer: true,
       timeout: 120_000,
       env: {
+        ...process.env,
         NODE_ENV: 'development',
         USE_MOCK_STRIPE: '1',
         JWT_SECRET: 'dev-secret',
@@ -32,12 +33,13 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev:frontend',
-      cwd: '..',
+      command: 'npm run dev',
+      cwd: '../frontend',
       port: 3000,
       reuseExistingServer: true,
       timeout: 120_000,
       env: {
+        ...process.env,
         NEXT_PUBLIC_API_BASE: 'http://localhost:4000',
         NEXT_PUBLIC_DISABLE_PAYMENTS: '1',
       },
