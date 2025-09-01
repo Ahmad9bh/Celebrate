@@ -153,6 +153,7 @@ app.use(express.json());
 
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Root info
 app.get('/', (_req, res) => {

@@ -88,3 +88,62 @@ npm run test:e2e
 ```
 
 Note: Run each block from the indicated directory (`backend/` or `frontend/`). The Prisma commands only apply to the backend.
+
+## Environment Variables
+
+Below are the key env vars. Store real secrets only in `.env` files (not committed). Values below are examples for local development only.
+
+### backend/.env
+
+| Variable | Description |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string used by the app and Prisma Client |
+| `JWT_SECRET` | Secret for signing JWTs in dev |
+| `STRIPE_SECRET_KEY` | Stripe secret (use a test key in dev) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret (dev) |
+| `ALLOWED_ORIGINS` | Comma-separated origins allowed by CORS |
+
+Example (dev only):
+
+```env
+# backend/.env (example – do NOT commit real secrets)
+DATABASE_URL=postgresql://neondb_owner:npg_VZzyg1Oa2JmX@ep-lively-scene-ab78tzb2-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+JWT_SECRET=dev-secret
+STRIPE_SECRET_KEY=sk_test_example
+STRIPE_WEBHOOK_SECRET=whsec_mock
+ALLOWED_ORIGINS=http://localhost:3000,https://celebrate.vercel.app
+```
+
+### frontend/.env.local
+
+| Variable | Description |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE` | Backend API base URL |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key |
+
+Example (dev only):
+
+```env
+# frontend/.env.local (example – do NOT commit real secrets)
+NEXT_PUBLIC_API_BASE=http://localhost:4000
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy
+```
+
+## Health Endpoints
+
+The backend exposes two health endpoints for convenience:
+
+- `GET /api/health` → returns `{ ok: true }`
+- `GET /health` → returns `{ ok: true }`
+
+These are served by `backend/src/server.ts` and are available when running `npm run start:api`.
+
+## Root Scripts Recap
+
+From the repo root `package.json`:
+
+- `start:api` → runs backend dev server (port 4000)
+- `start:web` → runs frontend dev server (port 3000)
+- `test:all` → backend unit tests + frontend E2E
+- `db:seed` → seeds database using `backend/prisma/seed.ts`
+- `db:reset` → resets DB then seeds
