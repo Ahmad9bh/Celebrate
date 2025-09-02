@@ -89,6 +89,19 @@ npm run test:e2e
 
 Note: Run each block from the indicated directory (`backend/` or `frontend/`). The Prisma commands only apply to the backend.
 
+## Running Prisma & Tests
+
+Run all Prisma commands and tests from `backend/`:
+
+```bash
+cd backend
+npx prisma generate
+npx prisma db push --force-reset --skip-generate
+npm test
+```
+
+Note: You can also run Prisma from the repo root now (schema mapped via `package.json`), e.g. `npx prisma generate`.
+
 ## Environment Variables
 
 Below are the key env vars. Store real secrets only in `.env` files (not committed). Values below are examples for local development only.
