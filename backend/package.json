@@ -14,8 +14,8 @@
     "db:reset": "prisma migrate reset --force && prisma db seed",
     "pretest": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset --skip-generate",
     "pretest:watch": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset --skip-generate",
-    "test": "cross-env NODE_ENV=test vitest run test/api.test.ts && cross-env NODE_ENV=test vitest run test/more.test.ts",
-    "test:watch": "cross-env NODE_ENV=test vitest test/api.test.ts & cross-env NODE_ENV=test vitest test/more.test.ts"
+    "test": "cross-env NODE_ENV=test vitest run",
+    "test:watch": "cross-env NODE_ENV=test vitest"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
