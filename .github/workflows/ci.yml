@@ -74,6 +74,7 @@ jobs:
           echo "Checking Prisma status and ensuring schema is applied"
           npx -y prisma@5.22.0 migrate status --schema prisma/schema.prisma || true
           npx -y prisma@5.22.0 db push --skip-generate --schema prisma/schema.prisma
+          npm i -D pg@8
           node -e "(async()=>{const {Client}=require('pg');const u=process.env.DATABASE_URL;const c=new Client({connectionString:u});await c.connect();const r=await c.query(\"select table_schema,table_name from information_schema.tables where table_schema='public' order by 1,2\");console.log('Tables:',r.rows);await c.end();})().catch(e=>{console.error(e);process.exit(1);});"
 
       - name: Run tests
