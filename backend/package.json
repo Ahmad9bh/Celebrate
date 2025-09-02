@@ -12,8 +12,8 @@
     "db:seed": "ts-node --transpileOnly prisma/seed.ts",
     "db:push": "prisma db push",
     "db:reset": "prisma migrate reset --force && prisma db seed",
-    "pretest": "cross-env NODE_ENV=test prisma db push --force-reset --skip-generate",
-    "pretest:watch": "cross-env NODE_ENV=test prisma db push --force-reset --skip-generate",
+    "pretest": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset --skip-generate",
+    "pretest:watch": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset --skip-generate",
     "test": "cross-env NODE_ENV=test vitest run test/api.test.ts && cross-env NODE_ENV=test vitest run test/more.test.ts",
     "test:watch": "cross-env NODE_ENV=test vitest test/api.test.ts & cross-env NODE_ENV=test vitest test/more.test.ts"
   },
