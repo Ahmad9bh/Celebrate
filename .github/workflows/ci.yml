@@ -37,12 +37,20 @@ jobs:
             echo "PG_TEST_DATABASE_URL is not set in repo secrets."
             exit 1
           fi
+          if [ -z "${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}" ]; then
+            echo "PG_TEST_DIRECT_DATABASE_URL is not set in repo secrets."
+            exit 1
+          fi
 
       - name: Run Prisma migrations (deploy)
         working-directory: backend
         env:
-          DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
         run: |
+          echo "Database URL diagnostics (migrations):"
+          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}}"
+          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}}"
           pwd
           test -f prisma/schema.prisma && echo "Found prisma/schema.prisma" || (echo "schema.prisma not found" && ls -la && ls -la prisma && exit 1)
           # Reset the test database to ensure an empty schema in CI (safe for ephemeral test DBs)
@@ -69,8 +77,12 @@ jobs:
       - name: Prisma sanity (ensure schema + list tables)
         working-directory: backend
         env:
-          DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
         run: |
+          echo "Database URL diagnostics (sanity):"
+          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}}"
+          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}}"
           echo "Checking Prisma status and ensuring schema is applied"
           npx -y prisma@5.22.0 migrate status --schema prisma/schema.prisma || true
           npx -y prisma@5.22.0 db push --skip-generate --schema prisma/schema.prisma
@@ -81,7 +93,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
           SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}
-        run: npm test
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+        run: |
+          echo "Database URL diagnostics (backend tests):"
+          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}}"
+          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}}"
+          npm test
 
   e2e-frontend:
     needs: [migrations]
@@ -106,11 +123,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
           SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
           JWT_SECRET: dev-secret
           USE_MOCK_STRIPE: "1"
           NEXT_PUBLIC_API_BASE: http://localhost:4000
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_dummy
-        run: npm run test:e2e
+        run: |
+          echo "Database URL diagnostics (e2e):"
+          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}}"
+          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}}"
+          npm run test:e2e
 
       - name: Upload Playwright HTML report
         if: failure()
