@@ -53,10 +53,8 @@ jobs:
           node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}"
           pwd
           test -f prisma/schema.prisma && echo "Found prisma/schema.prisma" || (echo "schema.prisma not found" && ls -la && ls -la prisma && exit 1)
-          # Reset the test database to ensure an empty schema in CI (safe for ephemeral test DBs)
-          npx -y prisma@5.22.0 migrate reset --force --skip-seed --schema prisma/schema.prisma
-          # Deploy migrations on a clean database
-          npx -y prisma@5.22.0 migrate deploy --schema prisma/schema.prisma
+          # Reset and apply schema directly (simpler path for CI)
+          npx -y prisma@5.22.0 db push --force-reset --skip-generate --schema prisma/schema.prisma
 
   backend-tests:
     needs: [migrations]
