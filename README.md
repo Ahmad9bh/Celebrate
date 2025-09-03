@@ -142,6 +142,33 @@ NEXT_PUBLIC_API_BASE=http://localhost:4000
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy
 ```
 
+## CI Setup (GitHub Actions)
+
+This repo includes `.github/workflows/ci.yml` to run Prisma schema setup, backend tests, and frontend E2E tests.
+
+### Required GitHub Actions Secrets
+
+Set these in GitHub → Settings → Secrets and variables → Actions:
+
+- `PG_TEST_DATABASE_URL` — pooled Postgres URL for app runtime/tests (e.g., Neon "-pooler").
+- `PG_TEST_DIRECT_DATABASE_URL` — DIRECT/non-pooled URL used by Prisma CLI (migrations/schema push).
+- `PG_TEST_SHADOW_DATABASE_URL` — shadow DB used by Prisma migration engine (safe to set even if using `db push`).
+- `JWT_SECRET` — secret for signing JWTs in CI (any non-empty string is fine for tests).
+
+### What CI runs
+
+- Prisma schema application in `backend/`:
+  - Fallback path for reliability: `npx prisma db push --force-reset --skip-generate`.
+  - TODO: Switch back to `npx prisma migrate deploy` when migrations are stable.
+- Backend unit tests from `backend/` with pooled DB URL.
+- Frontend Playwright E2E from `frontend/` (browsers installed in CI, HTML report uploaded on failure).
+
+### Notes
+
+- Do NOT commit real `.env` files. All sensitive values should be provided via GitHub Actions secrets.
+- Prisma CLI must use the DIRECT (non-pooled) URL; applications/tests should use the pooled URL.
+- Node modules are cached in CI via `actions/setup-node` with `cache: npm`.
+
 ## Health Endpoints
 
 The backend exposes two health endpoints for convenience:
