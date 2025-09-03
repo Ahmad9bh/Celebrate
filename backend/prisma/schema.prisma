@@ -5,6 +5,9 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Use a direct (non-pooled) connection for Prisma migrations/resets
+  // Set DIRECT_DATABASE_URL in backend/.env to your Neon direct URL
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model User {

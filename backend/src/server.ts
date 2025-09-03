@@ -122,6 +122,9 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
         const bookingId = (pi?.metadata?.bookingId
           || pi?.metadata?.booking_id
           || pi?.bookingId) as string | undefined;
+        if (process.env.NODE_ENV === 'test') {
+          console.debug('[webhook] payment_intent.succeeded meta bookingId=', bookingId);
+        }
         if (bookingId) {
           await prisma.booking.update({ where: { id: bookingId }, data: { status: 'confirmed' } }).catch(() => {});
         }
@@ -132,6 +135,9 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
         const bookingId = (pi?.metadata?.bookingId
           || pi?.metadata?.booking_id
           || pi?.bookingId) as string | undefined;
+        if (process.env.NODE_ENV === 'test') {
+          console.debug('[webhook] payment_intent.payment_failed meta bookingId=', bookingId);
+        }
         if (bookingId) {
           await prisma.booking.update({ where: { id: bookingId }, data: { status: 'failed' } }).catch(() => {});
         }
@@ -286,26 +292,52 @@ app.post('/api/venues', auth(['owner','admin']), async (req: any, res) => {
 app.post('/api/bookings', auth(['user','admin']), async (req: any, res) => {
   const parsed = BookingCreateSchema.safeParse(req.body);
   if (!parsed.success) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] invalid request body', { body: req.body, issues: parsed.error?.issues });
+    }
     return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
   }
   const { venueId, date, guests } = parsed.data;
   // basic guards
   const today = new Date(); today.setHours(0,0,0,0);
-  if (date < today) return res.status(400).json({ error: 'Date must be today or later' });
+  if (date < today) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: past date', { date: date.toISOString(), today: today.toISOString() });
+    }
+    return res.status(400).json({ error: 'Date must be today or later' });
+  }
 
   const venue = await prisma.venue.findUnique({ where: { id: venueId } });
-  if (!venue) return res.status(400).json({ error: 'Invalid venue' });
+  if (!venue) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: invalid venue', { venueId });
+    }
+    return res.status(400).json({ error: 'Invalid venue' });
+  }
   if ((venue as any).capacity && guests > (venue as any).capacity) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: guests exceed capacity', { guests, capacity: (venue as any).capacity });
+    }
     return res.status(400).json({ error: 'Guests exceed capacity' });
   }
   // prevent double booking for same date (day granularity)
   const isoDay = date.toISOString().slice(0,10);
   const exists = await prisma.booking.findFirst({ where: { venueId, date: { gte: new Date(isoDay), lt: new Date(new Date(isoDay).getTime() + 24*60*60*1000) } } });
-  if (exists) return res.status(400).json({ error: 'Date already booked' });
+  if (exists) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: date already booked', { venueId, isoDay });
+    }
+    return res.status(400).json({ error: 'Date already booked' });
+  }
 
   // Ensure user exists to satisfy FK if token was minted without prior login
   const userId = req.user?.sub as string | undefined;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!userId) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: missing userId in token');
+    }
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const existingUser = await prisma.user.findUnique({ where: { id: userId } });
   if (!existingUser) {
     await prisma.user.create({ data: {
@@ -331,6 +363,9 @@ app.post('/api/bookings', auth(['user','admin']), async (req: any, res) => {
     res.status(201).json(booking);
   } catch (e: any) {
     if (e?.code === 'P2003') {
+      if (process.env.NODE_ENV === 'test') {
+        console.debug('[bookings] rejected: FK violation', { venueId, userId });
+      }
       return res.status(400).json({ error: 'Invalid user or venue' });
     }
     console.error('Create booking error', e);
