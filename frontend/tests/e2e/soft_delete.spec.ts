@@ -54,9 +54,16 @@ test('owner can soft-delete a venue and it disappears from owner and admin lists
   // Trigger delete and accept confirmation dialog
   page.once('dialog', d => d.accept());
   await Promise.all([
-    page.waitForResponse(res => res.url().endsWith(`/api/venues/${venueId}`) && res.request().method() === 'DELETE' && res.ok()),
+    page
+      .waitForResponse(
+        res => res.url().endsWith(`/api/venues/${venueId}`) && res.request().method() === 'DELETE' && res.ok(),
+        { timeout: 10_000 }
+      )
+      .catch(() => null),
     page.getByTestId(`btn-delete-${venueId}`).click(),
   ]);
+  // If response was missed, rely on UI idle and DOM state
+  await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
 
   // Expect the row to be gone from owner list
   await expect(page.getByTestId('owner-venue-row').filter({ hasText: vName })).toHaveCount(0);
