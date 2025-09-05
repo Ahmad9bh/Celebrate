@@ -196,19 +196,27 @@ Set these in GitHub → Settings → Secrets and variables → Actions:
 
 ### What CI runs
 
-- Prisma schema application in `backend/`:
-  - Fallback path for reliability: `npx prisma db push --force-reset --skip-generate`.
-  - TODO: Switch back to `npx prisma migrate deploy` when migrations are stable.
-- Backend unit tests from `backend/` with pooled DB URL.
-- Frontend Playwright E2E from `frontend/` (browsers installed in CI, HTML report uploaded on failure).
+- __Schema setup (backend)__
+  - Uses DIRECT (non-pooled) URL for Prisma CLI.
+  - Applies schema via `db push` to an isolated schema name per job: `&schema=<job>_${{ github.run_id }}`.
+  - Note: we pin Prisma CLI to 5.22.x for stability. Upgrade to 6.x later with the migration guide.
+- __Backend tests (Vitest)__
+  - Runs with pooled URL.
+  - Forces `PRISMA_CLIENT_ENGINE_TYPE=binary` for maximum stability on Windows/CI.
+  - Ignores env files by setting `PRISMA_IGNORE_ENV_FILES=1` and loads `backend/.env.test` explicitly where needed.
+- __Frontend E2E (Playwright)__
+  - Starts backend on port 4000 and Next.js on port 3000.
+  - In CI, Next.js is built and started in production mode (disables dev HMR to avoid React invalid-hook errors).
+  - Uploads HTML report and raw `test-results` on failure for debugging.
 
 ### Notes
 
-- Do NOT commit real `.env` files. All sensitive values should be provided via GitHub Actions secrets.
-- Prisma CLI must use the DIRECT (non-pooled) URL; applications/tests should use the pooled URL.
-- Node modules are cached in CI via `actions/setup-node` with `cache: npm`.
+- __Do not commit__ real `.env` files. Use GitHub Actions secrets.
+- __Prisma CLI must use the DIRECT URL__; apps/tests should use the pooled URL.
+- Node modules are cached in CI via `actions/setup-node`.
+- Schemas are isolated per job/run to prevent test interference.
 
-Prisma versioning: CI currently pins `prisma@5.22.0` for CLI steps in `.github/workflows/ci.yml`. Ignore local upgrade prompts to v6 until we coordinate a repo-wide upgrade.
+Prisma versioning: CI currently pins `prisma@5.22.0`. Ignore local upgrade prompts to v6 until we coordinate a repo-wide upgrade.
 
 ## Health Endpoints
 
@@ -226,5 +234,26 @@ From the repo root `package.json`:
 - `start:api` → runs backend dev server (port 4000)
 - `start:web` → runs frontend dev server (port 3000)
 - `test:all` → backend unit tests + frontend E2E
+- `ci:test` → backend tests then frontend E2E (useful locally to mirror CI)
+- `ci:db:push` → run Prisma `db push` against `backend/prisma/schema.prisma`
+- `start:all` → run both backend and frontend together (dev)
 - `db:seed` → seeds database using `backend/prisma/seed.ts`
 - `db:reset` → resets DB then seeds
+- `db:generate` → Prisma client generate (backend)
+
+## E2E stability tips
+
+- __Wait for the network and the UI__:
+  - Wrap state-changing clicks (approve/suspend/delete) in `Promise.all([waitForResponse, click])`.
+  - After filter toggles, wait for the admin list to reload and then assert DOM with a polling helper.
+- __Use the DOM polling helper__ for eventual UI consistency:
+  - `frontend/tests/e2e/_utils.ts` provides `waitRowsContain(page, tableTestId, rowTestId, text, expectedCount, timeout)`.
+  - Prefer this over only `toHaveCount()` when CI is under load.
+- __Run Next.js in production__ during CI to avoid React invalid hook errors.
+- __Keep timeouts realistic in CI__: tests use longer timeouts under `CI=true`.
+
+## Direct vs pooled URLs (Prisma + Neon)
+
+- __Applications/Prisma Client__: use the pooled URL (Neon pooler host) with `sslmode=require`.
+- __Prisma CLI (db push, migrate)__: use the DIRECT URL (non-pooled host) to avoid transaction/visibility issues.
+- In CI, we also isolate schemas per job/run by appending `&schema=<job>_${{ github.run_id }}`.
