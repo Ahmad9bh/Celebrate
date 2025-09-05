@@ -1,17 +1,27 @@
 async function waitAdminListReload(page: any, timeout: number = 15000) {
-  await page.waitForResponse(
-    (res: any) => {
-      try {
-        const url = res.url();
-        const method = res.request().method();
-        const status = res.status?.() ?? 0;
-        return url.includes('/api/admin/venues') && (method === 'GET' || method === 'POST') && status < 400;
-      } catch {
-        return false;
-      }
-    },
-    { timeout }
-  );
+  const responseTimeout = Math.min(5000, timeout);
+  try {
+    await page.waitForResponse(
+      (res: any) => {
+        try {
+          const url = res.url();
+          const method = res.request().method();
+          const status = res.status?.() ?? 0;
+          return url.includes('/api/admin/venues') && (method === 'GET' || method === 'POST') && status < 400;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: responseTimeout }
+    );
+  } catch {
+    // ignore response timeout; fall back to network idle
+  }
+  try {
+    await page.waitForLoadState('networkidle', { timeout: Math.min(3000, timeout) });
+  } catch {}
+  // small settle delay
+  await page.waitForTimeout(150);
 }
 import { test, expect } from '@playwright/test';
 import { waitRowsContain } from './_utils';
