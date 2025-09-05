@@ -1,5 +1,9 @@
 # Celebrate
 
+[![Release](https://img.shields.io/github/v/release/Ahmad9bh/Celebrate)](https://github.com/Ahmad9bh/Celebrate/releases)
+
+Latest release: [v0.1.1](https://github.com/Ahmad9bh/Celebrate/releases/tag/v0.1.1)
+
 A full-stack platform to discover, compare, and book event venues. Web (Next.js), Mobile (Expo), Backend (Express + TypeScript). Multi-language (EN/AR) and multi-currency (GBP + Gulf currencies) ready.
 
 ## Structure
@@ -105,6 +109,8 @@ Note: You can also run Prisma from the repo root now (schema mapped via `package
 ### Safe local testing with backend/.env.test
 
 Important: backend tests reset the database schema before running. To avoid touching your dev/prod DB, use a dedicated test database via `backend/.env.test`.
+
+Template file to copy from: `backend/.env.test.example` (includes pooled and direct Neon URL examples and recommended parameters).
 
 Steps:
 
@@ -226,6 +232,17 @@ The backend exposes two health endpoints for convenience:
 - `GET /health` → returns `{ ok: true }`
 
 These are served by `backend/src/server.ts` and are available when running `npm run start:api`.
+
+## Release Highlights
+
+- v0.1.1 – Stable E2E + Test Hardening
+  - Next.js runs in production mode during Playwright E2E (local + CI) to avoid dev/HMR hook issues.
+  - E2E specs use time‑bounded network waits with DOM polling fallbacks (`admin_filters`, `soft_delete`, `booking`).
+  - Backend tests hardened for Windows/CI with Prisma binary engine and isolated `.env.test` configuration.
+  - Docs expanded: Testing & CI guide, direct vs pooled Neon URLs, schema isolation, troubleshooting.
+  - Root scripts added: `ci:test`, `ci:db:push`, `start:all`.
+
+See the full release notes: [v0.1.1](https://github.com/Ahmad9bh/Celebrate/releases/tag/v0.1.1)
 
 ## Root Scripts Recap
 
