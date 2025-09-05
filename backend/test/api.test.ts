@@ -9,11 +9,10 @@ import prisma from '../src/db';
 describe('Celebrate API', () => {
   // Clean DB before each test to isolate state
   beforeEach(async () => {
-    await prisma.$transaction([
-      prisma.booking.deleteMany({}),
-      prisma.venue.deleteMany({}),
-      prisma.user.deleteMany({}),
-    ]);
+    // Delete in dependency order to avoid FK violations in CI
+    await prisma.booking.deleteMany({});
+    await prisma.venue.deleteMany({});
+    await prisma.user.deleteMany({});
   });
 
   afterAll(async () => {
@@ -50,6 +49,11 @@ describe('Celebrate API', () => {
       .post('/api/bookings')
       .set('Authorization', `Bearer ${token}`)
       .send({ venueId, date: d.toISOString(), guests: 2 });
+    if (booking.status !== 201) {
+      // CI diagnostics
+      // eslint-disable-next-line no-console
+      console.error('Booking creation failed', { status: booking.status, body: booking.body });
+    }
     expect(booking.status).toBe(201);
     const bookingId = booking.body.id as string;
 
@@ -81,6 +85,11 @@ describe('Celebrate API', () => {
       .post('/api/bookings')
       .set('Authorization', `Bearer ${token}`)
       .send({ venueId: venue.body.id, date: d.toISOString(), guests: 2 });
+    if (booking.status !== 201) {
+      // CI diagnostics
+      // eslint-disable-next-line no-console
+      console.error('Booking creation failed (webhook test)', { status: booking.status, body: booking.body });
+    }
     const bookingId = booking.body.id as string;
 
     // Fire webhook event with mocked Stripe (server parses raw JSON in test)

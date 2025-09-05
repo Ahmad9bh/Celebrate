@@ -9,6 +9,19 @@ function getBase() {
   return process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 }
 
+export async function putJSON<T = any>(path: string, body?: Json): Promise<T> {
+  const res = await apiFetch(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `PUT ${path} failed with ${res.status}`);
+  }
+  return res.json();
+}
+
 function getAuthHeader() {
   if (typeof window === "undefined") return {} as Record<string, string>;
   try {

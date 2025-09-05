@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "dev:e2e": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset && ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:e2e": "cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma generate && cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma db push --force-reset && ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p .",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
@@ -12,13 +12,16 @@
     "db:seed": "ts-node --transpileOnly prisma/seed.ts",
     "db:push": "prisma db push",
     "db:reset": "prisma migrate reset --force && prisma db seed",
-    "pretest": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset",
-    "pretest:watch": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset",
-    "test": "cross-env NODE_ENV=test vitest run test/api.test.ts && cross-env NODE_ENV=test vitest run test/more.test.ts",
-    "test:watch": "cross-env NODE_ENV=test vitest test/api.test.ts & cross-env NODE_ENV=test vitest test/more.test.ts"
+    "db:reset:push": "prisma db push --force-reset --skip-generate",
+    "db:setup": "cross-env PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma generate && cross-env PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma db push --force-reset --skip-generate",
+    "pretest": "cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma generate && cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma db push --force-reset --skip-generate",
+    "pretest:watch": "cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma generate && cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary PRISMA_IGNORE_ENV_FILES=1 dotenv -e .env.test -- prisma db push --force-reset --skip-generate",
+    "test": "cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary vitest run",
+    "test:watch": "cross-env NODE_ENV=test PRISMA_CLIENT_ENGINE_TYPE=binary vitest",
+    "backend-tests": "npm test"
   },
   "dependencies": {
-    "@prisma/client": "^5.18.0",
+    "@prisma/client": "^5.22.0",
     "celebrate": "file:..",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -26,7 +29,6 @@
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "next": "14.2.32",
     "stripe": "^16.0.0",
     "zod": "^3.23.8"
   },
@@ -37,7 +39,8 @@
     "@types/node": "^20.11.30",
     "@types/supertest": "^6.0.2",
     "cross-env": "^7.0.3",
-    "prisma": "^5.18.0",
+    "prisma": "^5.22.0",
+    "dotenv-cli": "^7.4.2",
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

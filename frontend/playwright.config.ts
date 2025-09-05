@@ -5,10 +5,12 @@ import { defineConfig, devices } from '@playwright/test';
 // - Backend:  http://localhost:4000 (Express)
 // If not running, start them from repo root: `npm run dev`
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 30_000,
-  expect: { timeout: 5_000 },
+  timeout: isCI ? 40_000 : 30_000,
+  expect: { timeout: isCI ? 10_000 : 5_000 },
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
@@ -16,12 +18,13 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npm run dev:e2e --workspace backend',
+      command: 'npm run dev:e2e',
       cwd: '../backend',
       port: 4000,
       reuseExistingServer: true,
       timeout: 120_000,
       env: {
+        ...process.env,
         NODE_ENV: 'development',
         USE_MOCK_STRIPE: '1',
         JWT_SECRET: 'dev-secret',
@@ -32,12 +35,13 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev:frontend',
-      cwd: '..',
+      command: isCI ? 'npm run build && npm run start -- -p 3000' : 'npm run dev',
+      cwd: '../frontend',
       port: 3000,
       reuseExistingServer: true,
       timeout: 120_000,
       env: {
+        ...process.env,
         NEXT_PUBLIC_API_BASE: 'http://localhost:4000',
         NEXT_PUBLIC_DISABLE_PAYMENTS: '1',
       },

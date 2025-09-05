@@ -122,6 +122,9 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
         const bookingId = (pi?.metadata?.bookingId
           || pi?.metadata?.booking_id
           || pi?.bookingId) as string | undefined;
+        if (process.env.NODE_ENV === 'test') {
+          console.debug('[webhook] payment_intent.succeeded meta bookingId=', bookingId);
+        }
         if (bookingId) {
           await prisma.booking.update({ where: { id: bookingId }, data: { status: 'confirmed' } }).catch(() => {});
         }
@@ -132,6 +135,9 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
         const bookingId = (pi?.metadata?.bookingId
           || pi?.metadata?.booking_id
           || pi?.bookingId) as string | undefined;
+        if (process.env.NODE_ENV === 'test') {
+          console.debug('[webhook] payment_intent.payment_failed meta bookingId=', bookingId);
+        }
         if (bookingId) {
           await prisma.booking.update({ where: { id: bookingId }, data: { status: 'failed' } }).catch(() => {});
         }
@@ -153,6 +159,7 @@ app.use(express.json());
 
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Root info
 app.get('/', (_req, res) => {
@@ -198,11 +205,11 @@ app.get('/api/venues', async (req, res) => {
     return res.status(400).json({ error: 'Invalid query parameters', details: parsed.error.flatten() });
   }
   const { city, q, minCap, maxCap, amenity, eventType } = parsed.data;
-  const where: any = {};
+  const where: any = { isDeleted: false };
   if (minCap !== undefined || maxCap !== undefined) {
     where.capacity = { gte: minCap ?? undefined, lte: maxCap ?? undefined };
   }
-  const venues = (await prisma.venue.findMany({ where })).map(hydrateVenue);
+  const venues = (await prisma.venue.findMany({ where: where as any })).map(hydrateVenue);
   const cityLc = city ? city.toLowerCase() : null;
   const qLc = q ? q.toLowerCase() : null;
   const filtered = venues.filter((v: any) => {
@@ -216,22 +223,14 @@ app.get('/api/venues', async (req, res) => {
     if (eventType && !e.includes(String(eventType))) return false;
     return true;
   });
-  res.json({ items: filtered });
+  res.json({ items: filtered.map(hydrateVenue) });
 });
 
 app.get('/api/venues/:id', async (req, res) => {
-  const row = await prisma.venue.findUnique({ where: { id: req.params.id } });
-  const v = row && hydrateVenue(row as any);
-  if (!v) return res.status(404).json({ error: 'Not found' });
-  const availability = [0,1,2,3,4,5,6].map(i => {
-    const date = new Date();
-    date.setDate(date.getDate() + i * 7);
-    return date.toISOString().slice(0,10);
-  });
-  // Fetch booked dates for this venue
-  const bookings = await prisma.booking.findMany({ where: { venueId: req.params.id } });
-  const bookedDates = bookings.map((b: any) => new Date(b.date).toISOString().slice(0,10));
-  res.json({ ...v, availability, bookedDates });
+  const row = await prisma.venue.findFirst({ where: { id: req.params.id, isDeleted: false } as any });
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  const v = hydrateVenue(row as any);
+  return res.json(v);
 });
 
 // Owner: create/update venue (simplified)
@@ -241,43 +240,71 @@ app.post('/api/venues', auth(['owner','admin']), async (req: any, res) => {
     return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
   }
   try {
-    // Ensure owner exists to satisfy FK, in case token is minted without prior login
-    const ownerId = req.user?.sub as string;
+    // ...
+    const id = crypto.randomUUID();
+    const b = parsed.data;
+    // Ensure owner exists to satisfy FK when token is minted externally (E2E)
+    const ownerId = req.user?.sub as string | undefined;
     if (!ownerId) return res.status(401).json({ error: 'Unauthorized' });
     const existingOwner = await prisma.user.findUnique({ where: { id: ownerId } });
     if (!existingOwner) {
-      await prisma.user.create({ data: {
-        id: ownerId,
-        role: req.user?.role || 'owner',
-        name: req.user?.name || 'Owner',
-        // generate unique placeholder email for test/dev
-        email: `${ownerId}@local.test`,
-      }});
+      await prisma.user.create({
+        data: {
+          id: ownerId,
+          role: req.user?.role || 'owner',
+          name: req.user?.name || 'Owner',
+          email: `${ownerId}@local.test`,
+        },
+      });
     }
-
-    const id = 'v' + Math.random().toString(36).slice(2,7);
-    const b = parsed.data;
     const created = await prisma.venue.create({ data: {
       id,
-      rating: b.rating ?? 0,
-      ownerId,
-      images: JSON.stringify(b.images ?? []),
-      description: b.description ?? '',
-      amenities: JSON.stringify(b.amenities ?? []),
-      eventTypes: JSON.stringify(b.eventTypes ?? []),
-      capacity: b.capacity,
-      basePrice: b.basePrice,
+      name: b.name,
       city: b.city,
       country: b.country,
-      name: b.name
+      capacity: b.capacity ?? 0,
+      amenities: JSON.stringify(b.amenities ?? []),
+      eventTypes: JSON.stringify(b.eventTypes ?? []),
+      images: JSON.stringify(b.images ?? []),
+      description: b.description ?? '',
+      basePrice: b.basePrice ?? 0,
+      ownerId: ownerId,
+      rating: b.rating ?? 0,
     }});
     return res.status(201).json(hydrateVenue(created as any));
   } catch (e: any) {
-    if (e?.code === 'P2003') {
-      return res.status(400).json({ error: 'Owner does not exist' });
-    }
     console.error('Create venue error', e);
     return res.status(500).json({ error: 'Failed to create venue' });
+  }
+});
+
+// Owner/Admin: update venue
+app.put('/api/venues/:id', auth(['owner','admin']), async (req: any, res) => {
+  try {
+    const id = req.params.id;
+    const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    // ...
+    const parsed = VenueCreateSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    const b = parsed.data as any;
+    const updated = await prisma.venue.update({ where: { id }, data: {
+      name: b.name ?? existing.name,
+      city: b.city ?? existing.city,
+      country: b.country ?? existing.country,
+      capacity: b.capacity ?? (existing as any).capacity,
+      basePrice: b.basePrice ?? (existing as any).basePrice,
+      rating: b.rating ?? (existing as any).rating,
+      images: b.images ? JSON.stringify(b.images) : (existing as any).images,
+      amenities: b.amenities ? JSON.stringify(b.amenities) : (existing as any).amenities,
+      eventTypes: b.eventTypes ? JSON.stringify(b.eventTypes) : (existing as any).eventTypes,
+    }});
+    return res.json(hydrateVenue(updated as any));
+  } catch (e) {
+    console.error('Update venue error', e);
+    return res.status(500).json({ error: 'Failed to update venue' });
   }
 });
 
@@ -285,26 +312,52 @@ app.post('/api/venues', auth(['owner','admin']), async (req: any, res) => {
 app.post('/api/bookings', auth(['user','admin']), async (req: any, res) => {
   const parsed = BookingCreateSchema.safeParse(req.body);
   if (!parsed.success) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] invalid request body', { body: req.body, issues: parsed.error?.issues });
+    }
     return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
   }
   const { venueId, date, guests } = parsed.data;
   // basic guards
   const today = new Date(); today.setHours(0,0,0,0);
-  if (date < today) return res.status(400).json({ error: 'Date must be today or later' });
+  if (date < today) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: past date', { date: date.toISOString(), today: today.toISOString() });
+    }
+    return res.status(400).json({ error: 'Date must be today or later' });
+  }
 
   const venue = await prisma.venue.findUnique({ where: { id: venueId } });
-  if (!venue) return res.status(400).json({ error: 'Invalid venue' });
+  if (!venue) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: invalid venue', { venueId });
+    }
+    return res.status(400).json({ error: 'Invalid venue' });
+  }
   if ((venue as any).capacity && guests > (venue as any).capacity) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: guests exceed capacity', { guests, capacity: (venue as any).capacity });
+    }
     return res.status(400).json({ error: 'Guests exceed capacity' });
   }
   // prevent double booking for same date (day granularity)
   const isoDay = date.toISOString().slice(0,10);
   const exists = await prisma.booking.findFirst({ where: { venueId, date: { gte: new Date(isoDay), lt: new Date(new Date(isoDay).getTime() + 24*60*60*1000) } } });
-  if (exists) return res.status(400).json({ error: 'Date already booked' });
+  if (exists) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: date already booked', { venueId, isoDay });
+    }
+    return res.status(400).json({ error: 'Date already booked' });
+  }
 
   // Ensure user exists to satisfy FK if token was minted without prior login
   const userId = req.user?.sub as string | undefined;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!userId) {
+    if (process.env.NODE_ENV === 'test') {
+      console.debug('[bookings] rejected: missing userId in token');
+    }
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const existingUser = await prisma.user.findUnique({ where: { id: userId } });
   if (!existingUser) {
     await prisma.user.create({ data: {
@@ -330,6 +383,9 @@ app.post('/api/bookings', auth(['user','admin']), async (req: any, res) => {
     res.status(201).json(booking);
   } catch (e: any) {
     if (e?.code === 'P2003') {
+      if (process.env.NODE_ENV === 'test') {
+        console.debug('[bookings] rejected: FK violation', { venueId, userId });
+      }
       return res.status(400).json({ error: 'Invalid user or venue' });
     }
     console.error('Create booking error', e);
@@ -378,8 +434,36 @@ app.post('/api/payments/confirm', paymentsLimiter, auth(['user','admin']), async
 
 // Admin: list venues, approve (stubs)
 app.get('/api/admin/venues', auth(['admin']), async (_req, res) => {
-  const all = await prisma.venue.findMany();
-  res.json({ items: all });
+  const items = await prisma.venue.findMany({ where: { isDeleted: false } as any });
+  res.json({ items });
+});
+
+// Admin moderation stubs (no schema change yet)
+app.post('/api/admin/venues/:id/approve', auth(['admin']), async (req, res) => {
+  const id = req.params.id;
+  const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const updated = await prisma.venue.update({ where: { id }, data: { status: 'approved' } as any });
+  res.json({ ok: true, item: hydrateVenue(updated as any) });
+});
+app.post('/api/admin/venues/:id/suspend', auth(['admin']), async (req, res) => {
+  const id = req.params.id;
+  const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const updated = await prisma.venue.update({ where: { id }, data: { status: 'suspended' } as any });
+  res.json({ ok: true, item: hydrateVenue(updated as any) });
+});
+
+// Owner/Admin: soft delete venue
+app.delete('/api/venues/:id', auth(['owner','admin']), async (req: any, res) => {
+  const id = req.params.id;
+  const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user?.role !== 'admin' && existing.ownerId !== req.user?.sub) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const updated = await prisma.venue.update({ where: { id }, data: { isDeleted: true } as any });
+  res.json({ ok: true, item: hydrateVenue(updated as any) });
 });
 
 if (process.env.NODE_ENV !== 'test') {

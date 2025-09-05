@@ -6,11 +6,10 @@ import prisma from '../src/db';
 
 describe('Celebrate API - more cases', () => {
   beforeEach(async () => {
-    await prisma.$transaction([
-      prisma.booking.deleteMany({}),
-      prisma.venue.deleteMany({}),
-      prisma.user.deleteMany({}),
-    ]);
+    // Delete in dependency order to avoid FK violations in CI
+    await prisma.booking.deleteMany({});
+    await prisma.venue.deleteMany({});
+    await prisma.user.deleteMany({});
   });
 
   afterAll(async () => {

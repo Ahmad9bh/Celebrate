@@ -95,14 +95,18 @@ test('book a venue without Stripe (payments disabled)', async ({ page }) => {
   await page.fill('input[type="date"]', iso);
   await page.fill('input[type="number"]', '3');
 
-  // Submit and wait: first booking creation, then confirmation (payments disabled path)
+  // Submit and wait: observe the first POST to /api/bookings and then proceed (accept any status to avoid timeouts)
   const submit = page.getByRole('button', { name: /Book & Pay/i });
-  const bookingCreatedPromise = page.waitForResponse((r) => r.url().includes('/api/bookings') && r.request().method() === 'POST' && r.ok());
+  const bookingCreatedPromise = page.waitForResponse((r) => r.url().includes('/api/bookings') && r.request().method() === 'POST');
   await Promise.all([
     bookingCreatedPromise,
     submit.click(),
   ]);
   const createdRes = await bookingCreatedPromise;
+  if (!createdRes.ok()) {
+    const bodyText = await createdRes.text().catch(() => '');
+    throw new Error(`Booking creation failed: ${createdRes.status()} ${bodyText}`);
+  }
   const created = await createdRes.json();
 
   // Proactively confirm booking from test to avoid timing races in UI path
