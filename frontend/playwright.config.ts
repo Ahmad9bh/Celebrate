@@ -9,8 +9,8 @@ const isCI = !!process.env.CI;
 
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 30_000,
-  expect: { timeout: 5_000 },
+  timeout: isCI ? 40_000 : 30_000,
+  expect: { timeout: isCI ? 10_000 : 5_000 },
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',

@@ -48,12 +48,14 @@ test('Approve then Suspend toggles update counts dynamically', async ({ page }) 
   ]);
   await page.getByTestId('filter-approved').click();
   await waitAdminListReload(page, 15000);
+  await page.waitForLoadState('networkidle', { timeout: 5000 });
   shown = await page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').count();
   count = await getButtonCount(page, 'filter-approved');
   expect(shown).toBe(count);
   await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: name })).toHaveCount(1, { timeout: 15000 });
   await page.getByTestId('filter-pending').click();
   await waitAdminListReload(page, 15000);
+  await page.waitForLoadState('networkidle', { timeout: 5000 });
   await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: name })).toHaveCount(0, { timeout: 15000 });
 
   // Suspend -> should move from Approved to Suspended
@@ -64,6 +66,7 @@ test('Approve then Suspend toggles update counts dynamically', async ({ page }) 
   ]);
   await page.getByTestId('filter-suspended').click();
   await waitAdminListReload(page, 15000);
+  await page.waitForLoadState('networkidle', { timeout: 5000 });
   shown = await page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').count();
   count = await getButtonCount(page, 'filter-suspended');
   expect(shown).toBe(count);
@@ -225,6 +228,7 @@ test('Admin filters between Pending and Approved', async ({ page }) => {
   // All shows both
   await page.getByTestId('filter-all').click();
   await waitAdminListReload(page);
+  await page.waitForLoadState('networkidle', { timeout: 5000 });
   await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: pendingName })).toHaveCount(1, { timeout: 15000 });
   await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: approvedName })).toHaveCount(1, { timeout: 15000 });
   {
