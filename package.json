@@ -17,8 +17,13 @@
     "test:e2e": "npm run test:e2e --workspace frontend",
     "test:e2e:ui": "npm run test:e2e:ui --workspace frontend",
     "test:all": "npm run test --workspace backend && npm run test:e2e --workspace frontend",
+    "backend-tests": "npm run test --workspace backend",
     "db:seed": "npm run db:seed --workspace backend",
-    "db:reset": "npm run db:reset --workspace backend"
+    "db:reset": "npm run db:reset --workspace backend",
+    "db:generate": "npm run prisma:generate --workspace backend",
+    "e2e-frontend": "npm run test:e2e --workspace frontend",
+    "e2e": "npm run test:e2e --workspace frontend",
+    "e2e:ui": "npm run test:e2e:ui --workspace frontend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

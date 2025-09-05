@@ -102,6 +102,45 @@ npm test
 
 Note: You can also run Prisma from the repo root now (schema mapped via `package.json`), e.g. `npx prisma generate`.
 
+### Safe local testing with backend/.env.test
+
+Important: backend tests reset the database schema before running. To avoid touching your dev/prod DB, use a dedicated test database via `backend/.env.test`.
+
+Steps:
+
+1) Create `backend/.env.test` from the example:
+
+```
+cp backend/.env.test.example backend/.env.test
+```
+
+2) Set these variables in `backend/.env.test` to a SAFE test DB/branch:
+
+- `DATABASE_URL` (pooled; e.g. Neon pooler host with `sslmode=require&pgbouncer=true&connection_limit=1`)
+- `DIRECT_DATABASE_URL` (direct host; used by Prisma CLI for reset/push)
+- Optional: `SHADOW_DATABASE_URL`
+
+3) Install backend dev deps (adds `dotenv-cli` which loads `.env.test` for test Prisma commands):
+
+```
+cd backend
+npm install
+```
+
+4) Run backend tests from repo root or backend directory:
+
+```
+# from repo root
+npm run backend-tests
+
+# or from backend/
+npm test
+```
+
+The backend test pre-script will load `backend/.env.test` and run `prisma db push --force-reset --skip-generate` against the test database only.
+
+Note: Keep your regular dev `.env` pointing at your dev database; tests will not use it once `.env.test` is present.
+
 ## Environment Variables
 
 Below are the key env vars. Store real secrets only in `.env` files (not committed). Values below are examples for local development only.
@@ -168,6 +207,8 @@ Set these in GitHub → Settings → Secrets and variables → Actions:
 - Do NOT commit real `.env` files. All sensitive values should be provided via GitHub Actions secrets.
 - Prisma CLI must use the DIRECT (non-pooled) URL; applications/tests should use the pooled URL.
 - Node modules are cached in CI via `actions/setup-node` with `cache: npm`.
+
+Prisma versioning: CI currently pins `prisma@5.22.0` for CLI steps in `.github/workflows/ci.yml`. Ignore local upgrade prompts to v6 until we coordinate a repo-wide upgrade.
 
 ## Health Endpoints
 

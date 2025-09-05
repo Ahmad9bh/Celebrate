@@ -89,9 +89,9 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
-          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}
-          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=bt_${{ github.run_id }}
+          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}&schema=bt_${{ github.run_id }}_shadow
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=bt_${{ github.run_id }}
         run: |
           echo "Database URL diagnostics (backend tests):"
           node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
@@ -119,13 +119,21 @@ jobs:
 
       - name: Run E2E tests (starts servers automatically)
         env:
-          DATABASE_URL: ${{ secrets.PG_TEST_DATABASE_URL }}
-          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}
-          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=e2e_${{ github.run_id }}
+          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}&schema=e2e_${{ github.run_id }}_shadow
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=e2e_${{ github.run_id }}
+          # App/runtime
+          NODE_ENV: test
+          PRISMA_IGNORE_ENV_FILES: "1"
+          NEXT_TELEMETRY_DISABLED: "1"
           JWT_SECRET: dev-secret
           USE_MOCK_STRIPE: "1"
+          STRIPE_WEBHOOK_SECRET: whsec_mock
+          # Frontend config for Playwright
           NEXT_PUBLIC_API_BASE: http://localhost:4000
+          NEXT_PUBLIC_DISABLE_PAYMENTS: "1"
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_dummy
+          ALLOWED_ORIGINS: http://localhost:3000
         run: |
           echo "Database URL diagnostics (e2e):"
           node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
@@ -138,5 +146,14 @@ jobs:
         with:
           name: playwright-report
           path: frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Playwright raw test-results (for debugging)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: frontend/test-results
           if-no-files-found: ignore
           retention-days: 7

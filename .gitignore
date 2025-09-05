@@ -4,6 +4,7 @@ node_modules
 # Env files
 .env
 backend/.env
+backend/.env.test
 frontend/.env.local
 
 # Build artifacts
