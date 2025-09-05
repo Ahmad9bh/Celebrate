@@ -294,3 +294,31 @@ From the repo root `package.json`:
 - __Applications/Prisma Client__: use the pooled URL (Neon pooler host) with `sslmode=require`.
 - __Prisma CLI (db push, migrate)__: use the DIRECT URL (non-pooled host) to avoid transaction/visibility issues.
 - In CI, we also isolate schemas per job/run by appending `&schema=<job>_${{ github.run_id }}`.
+
+## Backend tests troubleshooting (Vitest + Prisma)
+
+- __Use a dedicated test env__: copy `backend/.env.test.example` to `backend/.env.test` and point it to a SAFE test DB/branch. Test scripts already set `PRISMA_IGNORE_ENV_FILES=1`.
+- __Direct vs pooled URLs__:
+  - Prisma CLI (db push/migrate): `DIRECT_DATABASE_URL` (non-pooled host) for reliability.
+  - App/Prisma Client at runtime: `DATABASE_URL` (pooled host) for connection efficiency.
+- __Windows stability__: tests set `PRISMA_CLIENT_ENGINE_TYPE=binary` in `backend/package.json` to avoid platform-specific flakiness.
+- __Run a single test__ (from repo root):
+  ```bash
+  npm run backend-tests -- -t "your test name"
+  # or run watch mode
+  npm run test:watch --workspace backend
+  ```
+- __Increase logging when debugging Prisma__:
+  ```bash
+  # verbose Prisma engine logs
+  DEBUG=prisma:engine npm run backend-tests
+  # or log queries (requires client config support)
+  PRISMA_LOG_LEVEL=query npm run backend-tests
+  ```
+- __Manual schema reset (DANGER: test DB only)__:
+  ```bash
+  # from repo root
+  npm run db:reset
+  # quick reset via db push (no migrate history)
+  npm run ci:db:push
+  ```
