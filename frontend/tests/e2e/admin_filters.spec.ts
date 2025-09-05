@@ -14,6 +14,7 @@ async function waitAdminListReload(page: any, timeout: number = 15000) {
   );
 }
 import { test, expect } from '@playwright/test';
+import { waitRowsContain } from './_utils';
 import jwt from 'jsonwebtoken';
 
 const API = process.env.API_BASE || 'http://localhost:4000';
@@ -52,11 +53,11 @@ test('Approve then Suspend toggles update counts dynamically', async ({ page }) 
   shown = await page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').count();
   count = await getButtonCount(page, 'filter-approved');
   expect(shown).toBe(count);
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: name })).toHaveCount(1, { timeout: 15000 });
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', name, 1, 15000);
   await page.getByTestId('filter-pending').click();
   await waitAdminListReload(page, 15000);
   await page.waitForLoadState('networkidle', { timeout: 5000 });
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: name })).toHaveCount(0, { timeout: 15000 });
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', name, 0, 15000);
 
   // Suspend -> should move from Approved to Suspended
   await page.getByTestId('filter-all').click();
@@ -70,9 +71,10 @@ test('Approve then Suspend toggles update counts dynamically', async ({ page }) 
   shown = await page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').count();
   count = await getButtonCount(page, 'filter-suspended');
   expect(shown).toBe(count);
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: name })).toHaveCount(1);
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', name, 1, 15000);
   await page.getByTestId('filter-approved').click();
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: name })).toHaveCount(0);
+  await waitAdminListReload(page, 15000);
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', name, 0, 15000);
 });
 
 test('Admin delete removes venue and updates counts', async ({ page }) => {
@@ -206,8 +208,8 @@ test('Admin filters between Pending and Approved', async ({ page }) => {
   // Check Pending filter only shows pendingName, not approvedName
   await page.getByTestId('filter-pending').click();
   await waitAdminListReload(page);
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: pendingName })).toHaveCount(1, { timeout: 15000 });
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: approvedName })).toHaveCount(0, { timeout: 15000 });
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', pendingName, 1, 15000);
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', approvedName, 0, 15000);
   {
     const shown = await page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').count();
     const count = await getButtonCount(page, 'filter-pending');
@@ -217,8 +219,8 @@ test('Admin filters between Pending and Approved', async ({ page }) => {
   // Check Approved filter only shows approvedName
   await page.getByTestId('filter-approved').click();
   await waitAdminListReload(page);
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: approvedName })).toHaveCount(1, { timeout: 15000 });
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: pendingName })).toHaveCount(0, { timeout: 15000 });
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', approvedName, 1, 15000);
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', pendingName, 0, 15000);
   {
     const shown = await page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').count();
     const count = await getButtonCount(page, 'filter-approved');
@@ -229,8 +231,8 @@ test('Admin filters between Pending and Approved', async ({ page }) => {
   await page.getByTestId('filter-all').click();
   await waitAdminListReload(page);
   await page.waitForLoadState('networkidle', { timeout: 5000 });
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: pendingName })).toHaveCount(1, { timeout: 15000 });
-  await expect(page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').filter({ hasText: approvedName })).toHaveCount(1, { timeout: 15000 });
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', pendingName, 1, 15000);
+  await waitRowsContain(page, 'admin-venues-table', 'admin-venue-row', approvedName, 1, 15000);
   {
     const shown = await page.getByTestId('admin-venues-table').getByTestId('admin-venue-row').count();
     const count = await getButtonCount(page, 'filter-all');
