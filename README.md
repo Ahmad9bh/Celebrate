@@ -252,6 +252,43 @@ From the repo root `package.json`:
 - __Run Next.js in production__ during CI to avoid React invalid hook errors.
 - __Keep timeouts realistic in CI__: tests use longer timeouts under `CI=true`.
 
+## Local E2E troubleshooting
+
+- __Run only a single spec__ to iterate quickly:
+  ```bash
+  # from repo root
+  npm run e2e -- --grep "Admin filters"
+  # or explicitly point to a spec
+  npm run e2e -- tests/e2e/admin_filters.spec.ts
+  ```
+
+- __Useful Playwright env vars__ (set before running):
+  ```bash
+  # increase log verbosity
+  DEBUG=pw:api
+  # slow motion to observe behavior (ms)
+  PWDEBUG=console
+  # headful mode
+  HEADED=1
+  ```
+
+- __Open the last HTML report locally__:
+  ```bash
+  # from frontend/
+  cd frontend
+  npx playwright show-report
+  # or specify a path
+  npx playwright show-report playwright-report
+  ```
+
+- __Record a trace__ for failures and inspect:
+  ```bash
+  # Playwright config already enables trace on first retry; to force it:
+  PLAYWRIGHT_TRACE=on npm run e2e
+  # Then open traces from the HTML report or with:
+  npx playwright show-trace path/to/trace.zip
+  ```
+
 ## Direct vs pooled URLs (Prisma + Neon)
 
 - __Applications/Prisma Client__: use the pooled URL (Neon pooler host) with `sslmode=require`.
