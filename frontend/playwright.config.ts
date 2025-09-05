@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
 // - Backend:  http://localhost:4000 (Express)
 // If not running, start them from repo root: `npm run dev`
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
@@ -33,7 +35,7 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev',
+      command: isCI ? 'npm run build && npm run start -- -p 3000' : 'npm run dev',
       cwd: '../frontend',
       port: 3000,
       reuseExistingServer: true,
