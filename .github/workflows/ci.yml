@@ -157,3 +157,28 @@ jobs:
           path: frontend/test-results
           if-no-files-found: ignore
           retention-days: 7
+  publish-api-docs:
+    needs: [backend-tests, e2e-frontend]   # only runs if tests pass
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate API docs (Swagger UI)
+        run: |
+          pwsh ./scripts/generate-api-docs.ps1
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
