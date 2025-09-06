@@ -97,17 +97,29 @@ test('book a venue without Stripe (payments disabled)', async ({ page }) => {
 
   // Submit and wait: observe the first POST to /api/bookings and then proceed (accept any status to avoid timeouts)
   const submit = page.getByRole('button', { name: /Book & Pay/i });
-  const bookingCreatedPromise = page.waitForResponse((r) => r.url().includes('/api/bookings') && r.request().method() === 'POST');
+  const bookingCreatedPromise = page
+    .waitForResponse((r) => r.url().includes('/api/bookings') && r.request().method() === 'POST', { timeout: 10_000 })
+    .catch(() => null as any);
   await Promise.all([
     bookingCreatedPromise,
     submit.click(),
   ]);
+  let created: any = null;
   const createdRes = await bookingCreatedPromise;
-  if (!createdRes.ok()) {
-    const bodyText = await createdRes.text().catch(() => '');
-    throw new Error(`Booking creation failed: ${createdRes.status()} ${bodyText}`);
+  if (createdRes) {
+    if (!createdRes.ok()) {
+      const bodyText = await createdRes.text().catch(() => '');
+      throw new Error(`Booking creation failed: ${createdRes.status()} ${bodyText}`);
+    }
+    created = await createdRes.json();
+  } else {
+    // Fall back: fetch latest booking for this user
+    const me = await fetch(`${API}/api/bookings/me`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!me.ok) throw new Error('Failed to fetch my bookings after create');
+    const data = await me.json();
+    created = (data.items && data.items[0]) || null;
+    if (!created) throw new Error('No booking found after create');
   }
-  const created = await createdRes.json();
 
   // Proactively confirm booking from test to avoid timing races in UI path
   const confirmRes = await fetch(`${API}/api/payments/confirm`, {

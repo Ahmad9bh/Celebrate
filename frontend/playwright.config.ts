@@ -35,7 +35,8 @@ export default defineConfig({
       },
     },
     {
-      command: isCI ? 'npm run build && npm run start -- -p 3000' : 'npm run dev',
+      // Use production mode for local and CI to avoid React invalid-hook errors from dev HMR
+      command: 'npm run build && npm run start -- -p 3000',
       cwd: '../frontend',
       port: 3000,
       reuseExistingServer: true,

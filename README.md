@@ -1,5 +1,9 @@
 # Celebrate
 
+[![Release](https://img.shields.io/github/v/release/Ahmad9bh/Celebrate)](https://github.com/Ahmad9bh/Celebrate/releases)
+
+Latest release: [v0.1.1](https://github.com/Ahmad9bh/Celebrate/releases/tag/v0.1.1)
+
 A full-stack platform to discover, compare, and book event venues. Web (Next.js), Mobile (Expo), Backend (Express + TypeScript). Multi-language (EN/AR) and multi-currency (GBP + Gulf currencies) ready.
 
 ## Structure
@@ -106,6 +110,8 @@ Note: You can also run Prisma from the repo root now (schema mapped via `package
 
 Important: backend tests reset the database schema before running. To avoid touching your dev/prod DB, use a dedicated test database via `backend/.env.test`.
 
+Template file to copy from: `backend/.env.test.example` (includes pooled and direct Neon URL examples and recommended parameters).
+
 Steps:
 
 1) Create `backend/.env.test` from the example:
@@ -196,19 +202,27 @@ Set these in GitHub → Settings → Secrets and variables → Actions:
 
 ### What CI runs
 
-- Prisma schema application in `backend/`:
-  - Fallback path for reliability: `npx prisma db push --force-reset --skip-generate`.
-  - TODO: Switch back to `npx prisma migrate deploy` when migrations are stable.
-- Backend unit tests from `backend/` with pooled DB URL.
-- Frontend Playwright E2E from `frontend/` (browsers installed in CI, HTML report uploaded on failure).
+- __Schema setup (backend)__
+  - Uses DIRECT (non-pooled) URL for Prisma CLI.
+  - Applies schema via `db push` to an isolated schema name per job: `&schema=<job>_${{ github.run_id }}`.
+  - Note: we pin Prisma CLI to 5.22.x for stability. Upgrade to 6.x later with the migration guide.
+- __Backend tests (Vitest)__
+  - Runs with pooled URL.
+  - Forces `PRISMA_CLIENT_ENGINE_TYPE=binary` for maximum stability on Windows/CI.
+  - Ignores env files by setting `PRISMA_IGNORE_ENV_FILES=1` and loads `backend/.env.test` explicitly where needed.
+- __Frontend E2E (Playwright)__
+  - Starts backend on port 4000 and Next.js on port 3000.
+  - In CI, Next.js is built and started in production mode (disables dev HMR to avoid React invalid-hook errors).
+  - Uploads HTML report and raw `test-results` on failure for debugging.
 
 ### Notes
 
-- Do NOT commit real `.env` files. All sensitive values should be provided via GitHub Actions secrets.
-- Prisma CLI must use the DIRECT (non-pooled) URL; applications/tests should use the pooled URL.
-- Node modules are cached in CI via `actions/setup-node` with `cache: npm`.
+- __Do not commit__ real `.env` files. Use GitHub Actions secrets.
+- __Prisma CLI must use the DIRECT URL__; apps/tests should use the pooled URL.
+- Node modules are cached in CI via `actions/setup-node`.
+- Schemas are isolated per job/run to prevent test interference.
 
-Prisma versioning: CI currently pins `prisma@5.22.0` for CLI steps in `.github/workflows/ci.yml`. Ignore local upgrade prompts to v6 until we coordinate a repo-wide upgrade.
+Prisma versioning: CI currently pins `prisma@5.22.0`. Ignore local upgrade prompts to v6 until we coordinate a repo-wide upgrade.
 
 ## Health Endpoints
 
@@ -219,6 +233,17 @@ The backend exposes two health endpoints for convenience:
 
 These are served by `backend/src/server.ts` and are available when running `npm run start:api`.
 
+## Release Highlights
+
+- v0.1.1 – Stable E2E + Test Hardening
+  - Next.js runs in production mode during Playwright E2E (local + CI) to avoid dev/HMR hook issues.
+  - E2E specs use time‑bounded network waits with DOM polling fallbacks (`admin_filters`, `soft_delete`, `booking`).
+  - Backend tests hardened for Windows/CI with Prisma binary engine and isolated `.env.test` configuration.
+  - Docs expanded: Testing & CI guide, direct vs pooled Neon URLs, schema isolation, troubleshooting.
+  - Root scripts added: `ci:test`, `ci:db:push`, `start:all`.
+
+See the full release notes: [v0.1.1](https://github.com/Ahmad9bh/Celebrate/releases/tag/v0.1.1)
+
 ## Root Scripts Recap
 
 From the repo root `package.json`:
@@ -226,5 +251,91 @@ From the repo root `package.json`:
 - `start:api` → runs backend dev server (port 4000)
 - `start:web` → runs frontend dev server (port 3000)
 - `test:all` → backend unit tests + frontend E2E
+- `ci:test` → backend tests then frontend E2E (useful locally to mirror CI)
+- `ci:db:push` → run Prisma `db push` against `backend/prisma/schema.prisma`
+- `start:all` → run both backend and frontend together (dev)
 - `db:seed` → seeds database using `backend/prisma/seed.ts`
 - `db:reset` → resets DB then seeds
+- `db:generate` → Prisma client generate (backend)
+
+## E2E stability tips
+
+- __Wait for the network and the UI__:
+  - Wrap state-changing clicks (approve/suspend/delete) in `Promise.all([waitForResponse, click])`.
+  - After filter toggles, wait for the admin list to reload and then assert DOM with a polling helper.
+- __Use the DOM polling helper__ for eventual UI consistency:
+  - `frontend/tests/e2e/_utils.ts` provides `waitRowsContain(page, tableTestId, rowTestId, text, expectedCount, timeout)`.
+  - Prefer this over only `toHaveCount()` when CI is under load.
+- __Run Next.js in production__ during CI to avoid React invalid hook errors.
+- __Keep timeouts realistic in CI__: tests use longer timeouts under `CI=true`.
+
+## Local E2E troubleshooting
+
+- __Run only a single spec__ to iterate quickly:
+  ```bash
+  # from repo root
+  npm run e2e -- --grep "Admin filters"
+  # or explicitly point to a spec
+  npm run e2e -- tests/e2e/admin_filters.spec.ts
+  ```
+
+- __Useful Playwright env vars__ (set before running):
+  ```bash
+  # increase log verbosity
+  DEBUG=pw:api
+  # slow motion to observe behavior (ms)
+  PWDEBUG=console
+  # headful mode
+  HEADED=1
+  ```
+
+- __Open the last HTML report locally__:
+  ```bash
+  # from frontend/
+  cd frontend
+  npx playwright show-report
+  # or specify a path
+  npx playwright show-report playwright-report
+  ```
+
+- __Record a trace__ for failures and inspect:
+  ```bash
+  # Playwright config already enables trace on first retry; to force it:
+  PLAYWRIGHT_TRACE=on npm run e2e
+  # Then open traces from the HTML report or with:
+  npx playwright show-trace path/to/trace.zip
+  ```
+
+## Direct vs pooled URLs (Prisma + Neon)
+
+- __Applications/Prisma Client__: use the pooled URL (Neon pooler host) with `sslmode=require`.
+- __Prisma CLI (db push, migrate)__: use the DIRECT URL (non-pooled host) to avoid transaction/visibility issues.
+- In CI, we also isolate schemas per job/run by appending `&schema=<job>_${{ github.run_id }}`.
+
+## Backend tests troubleshooting (Vitest + Prisma)
+
+- __Use a dedicated test env__: copy `backend/.env.test.example` to `backend/.env.test` and point it to a SAFE test DB/branch. Test scripts already set `PRISMA_IGNORE_ENV_FILES=1`.
+- __Direct vs pooled URLs__:
+  - Prisma CLI (db push/migrate): `DIRECT_DATABASE_URL` (non-pooled host) for reliability.
+  - App/Prisma Client at runtime: `DATABASE_URL` (pooled host) for connection efficiency.
+- __Windows stability__: tests set `PRISMA_CLIENT_ENGINE_TYPE=binary` in `backend/package.json` to avoid platform-specific flakiness.
+- __Run a single test__ (from repo root):
+  ```bash
+  npm run backend-tests -- -t "your test name"
+  # or run watch mode
+  npm run test:watch --workspace backend
+  ```
+- __Increase logging when debugging Prisma__:
+  ```bash
+  # verbose Prisma engine logs
+  DEBUG=prisma:engine npm run backend-tests
+  # or log queries (requires client config support)
+  PRISMA_LOG_LEVEL=query npm run backend-tests
+  ```
+- __Manual schema reset (DANGER: test DB only)__:
+  ```bash
+  # from repo root
+  npm run db:reset
+  # quick reset via db push (no migrate history)
+  npm run ci:db:push
+  ```

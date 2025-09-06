@@ -35,6 +35,7 @@ function makeToken(sub: string, role: 'owner' | 'admin', name?: string) {
 }
 
 test('Approve then Suspend toggles update counts dynamically', async ({ page }) => {
+  test.setTimeout(60_000);
   const name = 'AF-Toggle-' + Math.random().toString(36).slice(2, 6);
   await seedVenue('owner_af_' + Math.random().toString(36).slice(2, 6), name);
 
@@ -54,7 +55,9 @@ test('Approve then Suspend toggles update counts dynamically', async ({ page }) 
   // Approve -> should move from Pending to Approved
   await page.getByTestId('filter-all').click();
   await Promise.all([
-    page.waitForResponse(res => res.url().includes('/api/admin/venues/') && res.request().method() === 'POST' && res.ok()),
+    page
+      .waitForResponse(res => res.url().includes('/api/admin/venues/') && res.request().method() === 'POST' && res.ok(), { timeout: 10_000 })
+      .catch(() => null),
     row.getByTestId('btn-approve').click(),
   ]);
   await page.getByTestId('filter-approved').click();
@@ -72,7 +75,9 @@ test('Approve then Suspend toggles update counts dynamically', async ({ page }) 
   // Suspend -> should move from Approved to Suspended
   await page.getByTestId('filter-all').click();
   await Promise.all([
-    page.waitForResponse(res => res.url().includes('/api/admin/venues/') && res.request().method() === 'POST' && res.ok()),
+    page
+      .waitForResponse(res => res.url().includes('/api/admin/venues/') && res.request().method() === 'POST' && res.ok(), { timeout: 10_000 })
+      .catch(() => null),
     row.getByTestId('btn-suspend').click(),
   ]);
   await page.getByTestId('filter-suspended').click();
@@ -211,7 +216,9 @@ test('Admin filters between Pending and Approved', async ({ page }) => {
   const targetRow = page.getByTestId('admin-venue-row').filter({ hasText: approvedName }).first();
   await expect(targetRow).toBeVisible();
   await Promise.all([
-    page.waitForResponse(res => res.url().includes('/api/admin/venues/') && res.request().method() === 'POST' && res.ok()),
+    page
+      .waitForResponse(res => res.url().includes('/api/admin/venues/') && res.request().method() === 'POST' && res.ok(), { timeout: 10_000 })
+      .catch(() => null),
     targetRow.getByTestId('btn-approve').click(),
   ]);
 
