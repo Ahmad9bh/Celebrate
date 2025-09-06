@@ -1,8 +1,14 @@
 # Celebrate
 
+[![Phase 1 — Backend APIs](https://img.shields.io/badge/Project-Phase%201%20%E2%80%94%20Backend%20APIs-1f6feb?logo=github)](https://github.com/users/Ahmad9bh/projects/1)
+
+[![API Docs](https://img.shields.io/badge/API%20Docs-Swagger%20UI-0a0?logo=swagger)](https://ahmad9bh.github.io/Celebrate/)
+
 [![Release](https://img.shields.io/github/v/release/Ahmad9bh/Celebrate)](https://github.com/Ahmad9bh/Celebrate/releases)
 
 Latest release: [v0.1.1](https://github.com/Ahmad9bh/Celebrate/releases/tag/v0.1.1)
+
+A note for contributors: see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 A full-stack platform to discover, compare, and book event venues. Web (Next.js), Mobile (Expo), Backend (Express + TypeScript). Multi-language (EN/AR) and multi-currency (GBP + Gulf currencies) ready.
 
@@ -233,6 +239,30 @@ The backend exposes two health endpoints for convenience:
 
 These are served by `backend/src/server.ts` and are available when running `npm run start:api`.
 
+## Observability
+
+The backend emits lightweight JSON logs for important flows (payments, bookings, admin) using a simple structured format.
+
+Example lines:
+
+```json
+{"level":"info","msg":"webhook payment_intent.succeeded","eventId":"evt_123","bookingId":"b123"}
+{"level":"info","msg":"webhook event already processed; ignoring","eventId":"evt_123","type":"payment_intent.succeeded"}
+{"level":"warn","msg":"bookings invalid request body","issues":[{"path":["date"],"message":"Invalid"}]}
+{"level":"error","msg":"Create PI error","error":"network timeout"}
+```
+
+Quick filtering tips:
+
+- PowerShell: `Get-Content backend.log | Select-String '"level":"error"'`
+- bash: `grep '"level":"error"' backend.log`
+- jq (pretty): `jq -r 'select(.level=="error")' < backend.log`
+
+Notes:
+
+- Sensitive data is not logged; only contextual ids/metadata.
+- Logs are printed to stdout by default; redirect to a file if desired, e.g. `npm run start:api > backend.log`.
+
 ## Release Highlights
 
 - v0.1.1 – Stable E2E + Test Hardening
@@ -257,6 +287,47 @@ From the repo root `package.json`:
 - `db:seed` → seeds database using `backend/prisma/seed.ts`
 - `db:reset` → resets DB then seeds
 - `db:generate` → Prisma client generate (backend)
+
+## Project Board Scripts (GitHub Projects v2)
+
+The `scripts/` folder includes helpers for creating and syncing a Project v2 board and status labels.
+
+Status mapping (labels ↔ Project Status field):
+
+| Issue label         | Project Status option |
+|---------------------|-----------------------|
+| `status:todo`       | `Todo`                |
+| `status:in-progress`| `In Progress`         |
+| `status:review`     | `Review`              |
+| `status:done`       | `Done`                |
+
+Prereqs:
+
+- Install GitHub CLI and login: `gh auth login`
+- Ensure scopes: `gh auth refresh -s read:project -s project -h github.com`
+- Create a Project v2 with a single-select field named `Status` containing the options above.
+
+Scripts:
+
+- Create user-level project and add Phase 1 issues by title
+  - `scripts/phase1-project-setup.ps1`
+
+- Create/find project for a repo and add issues by milestone (or all OPEN issues)
+  - `scripts/repo-project-setup.ps1 -Owner "Ahmad9bh" -Repo "Celebrate" -ProjectTitle "Phase 1 - Backend APIs"`
+  - For org boards add `-OrgScope`
+
+- Ensure and apply status labels to issues in the milestone
+  - `scripts/board-helper-labels.ps1 -DefaultStatus "status:todo"`
+
+- Sync labels ↔ Project Status (auto-detect project number by title)
+  - `scripts/sync-phase1.ps1 -Owner "Ahmad9bh" -Repo "Celebrate" -ProjectTitle "Phase 1 - Backend APIs" -Direction both`
+  - Or specify the project number directly:
+    - `scripts/project-status-sync.ps1 -Owner "Ahmad9bh" -Repo "Celebrate" -ProjectNumber 1 -Direction both`
+
+PowerShell tips:
+
+- Quote URLs containing `&`, e.g. `"http://localhost:4000/api/venues?page=1&pageSize=5"`
+- Do not include angle brackets in commands; use real values instead of `<placeholder>`.
 
 ## E2E stability tips
 
