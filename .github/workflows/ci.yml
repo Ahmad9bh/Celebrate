@@ -58,7 +58,6 @@ jobs:
           node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}"
           pwd
           test -f prisma/schema.prisma && echo "Found prisma/schema.prisma" || (echo "schema.prisma not found" && ls -la && ls -la prisma && exit 1)
-          # Reset and apply schema directly (simpler path for CI)
           npx -y prisma@5.22.0 db push --force-reset --skip-generate --schema prisma/schema.prisma
 
   backend-tests:
@@ -86,7 +85,6 @@ jobs:
           echo "Database URL diagnostics (sanity):"
           node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
           node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}"
-          echo "Checking Prisma status and ensuring schema is applied"
           npx -y prisma@5.22.0 migrate status --schema prisma/schema.prisma || true
           npx -y prisma@5.22.0 db push --skip-generate --schema prisma/schema.prisma
           npm i -D pg@8
@@ -127,23 +125,17 @@ jobs:
           DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=e2e_${{ github.run_id }}
           SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}&schema=e2e_${{ github.run_id }}_shadow
           DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=e2e_${{ github.run_id }}
-          # App/runtime
           NODE_ENV: test
           PRISMA_IGNORE_ENV_FILES: "1"
           NEXT_TELEMETRY_DISABLED: "1"
           JWT_SECRET: dev-secret
           USE_MOCK_STRIPE: "1"
           STRIPE_WEBHOOK_SECRET: whsec_mock
-          # Frontend config for Playwright
           NEXT_PUBLIC_API_BASE: http://localhost:4000
           NEXT_PUBLIC_DISABLE_PAYMENTS: "1"
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_dummy
           ALLOWED_ORIGINS: http://localhost:3000
-        run: |
-          echo "Database URL diagnostics (e2e):"
-          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
-          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}"
-          npm run test:e2e
+        run: npm run test:e2e
 
       - name: Upload Playwright HTML report
         if: failure()
@@ -154,7 +146,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Upload Playwright raw test-results (for debugging)
+      - name: Upload Playwright raw test-results
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -175,10 +167,36 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate API docs (Swagger UI)
-        shell: pwsh
+        shell: bash
         run: |
-          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-          ./scripts/generate-api-docs.ps1
+          set -euo pipefail
+          echo "Workdir: $(pwd)"
+          test -f docs/openapi.yaml || { echo "docs/openapi.yaml missing"; exit 1; }
+          mkdir -p docs/site
+          cp docs/openapi.yaml docs/site/openapi.yaml
+          cat > docs/site/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>Celebrate API Docs</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+              <style> body { margin: 0; } #swagger-ui { max-width: 100%; } </style>
+            </head>
+            <body>
+              <div id="swagger-ui"></div>
+              <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+              <script>
+                window.ui = SwaggerUIBundle({
+                  url: './openapi.yaml',
+                  dom_id: '#swagger-ui',
+                  presets: [SwaggerUIBundle.presets.apis],
+                });
+              </script>
+            </body>
+          </html>
+          HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -188,29 +206,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        publish-api-docs:
-          needs: [backend-tests, e2e-frontend]   # only runs if tests pass
-          runs-on: ubuntu-latest
-      
-          steps:
-            - name: Checkout
-              uses: actions/checkout@v4
-      
-            - name: Setup Node
-              uses: actions/setup-node@v4
-              with:
-                node-version: 20
-      
-            - name: Generate API docs (Swagger UI)
-              run: |
-                pwsh ./scripts/generate-api-docs.ps1
-      
-            - name: Upload Pages artifact
-              uses: actions/upload-pages-artifact@v3
-              with:
-                path: docs/site
-      
-            - name: Deploy to GitHub Pages
-              id: deployment
-              uses: actions/deploy-pages@v4
-      
