@@ -1,0 +1,277 @@
+openapi: 3.0.3
+info:
+  title: Celebrate API
+  version: 0.1.1
+  description: REST API for venues, bookings, and payments.
+servers:
+  - url: http://localhost:4000
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /api/auth/login:
+    post:
+      summary: Mock login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+              required: [email]
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/venues:
+    get:
+      summary: List venues
+      parameters:
+        - in: query
+          name: city
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: minCap
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: maxCap
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: amenity
+          schema: { type: string }
+        - in: query
+          name: eventType
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: sort
+          description: name | -name | city | -createdAt | basePrice | rating | capacity
+          schema: { type: string }
+      responses:
+        '200':
+          description: Venues page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Venue' }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }
+                  totalPages: { type: integer }
+  /api/venues/{id}:
+    get:
+      summary: Get venue
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Venue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Venue'
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/bookings:
+    post:
+      summary: Create booking
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                venueId: { type: string }
+                date: { type: string, format: date }
+                guests: { type: integer, minimum: 1 }
+              required: [venueId, date, guests]
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/bookings/me:
+    get:
+      summary: List my bookings
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Booking' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/payments/intent:
+    post:
+      summary: Create payment intent
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bookingId: { type: string }
+              required: [bookingId]
+      responses:
+        '200':
+          description: Client secret
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientSecret: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/admin/venues:
+    get:
+      summary: Admin list venues
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Admin list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Venue' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object }
+          required: [code, message]
+      required: [error]
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        role: { type: string }
+        name: { type: string }
+        email: { type: string }
+      required: [id, role, name]
+    Venue:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer }
+        amenities:
+          type: array
+          items: { type: string }
+        eventTypes:
+          type: array
+          items: { type: string }
+        images:
+          type: array
+          items: { type: string }
+        description: { type: string }
+        basePrice: { type: integer }
+        ownerId: { type: string }
+        rating: { type: number }
+        status: { type: string }
+        isDeleted: { type: boolean }
+      required: [id, name, city, country, capacity]
+    Booking:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        venueId: { type: string }
+        date: { type: string, format: date-time }
+        guests: { type: integer }
+        status: { type: string }
+        totalPriceGBP: { type: integer }
+      required: [id, userId, venueId, date, guests, status]

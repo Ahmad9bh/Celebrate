@@ -10,9 +10,58 @@ describe('Celebrate API', () => {
   // Clean DB before each test to isolate state
   beforeEach(async () => {
     // Delete in dependency order to avoid FK violations in CI
+    await prisma.processedEvent.deleteMany({});
     await prisma.booking.deleteMany({});
     await prisma.venue.deleteMany({});
     await prisma.user.deleteMany({});
+  });
+
+  it('Webhook idempotency: duplicate event id is ignored', async () => {
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
+
+    // Prepare a booking
+    const login = await request(app).post('/api/auth/login').send({ email: 'payer3@example.com' });
+    const token = login.body.token as string;
+    const ownerLogin = await request(app).post('/api/auth/login').send({ email: 'owner4@example.com' });
+    const ownerId = ownerLogin.body.user.id as string;
+    const ownerToken = jwt.sign({ sub: ownerId, role: 'owner', name: 'Owner4' }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '1h' });
+    const venue = await request(app)
+      .post('/api/venues')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'WV2', description: 'd', city: 'L', country: 'UK', capacity: 10, basePrice: 100, images: [], amenities: [], eventTypes: [] });
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    const booking = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ venueId: venue.body.id, date: d.toISOString(), guests: 2 });
+    const bookingId = booking.body.id as string;
+
+    // Fire the same webhook event twice
+    const event = {
+      id: 'evt_test_dupe_1',
+      type: 'payment_intent.succeeded',
+      data: { object: { metadata: { bookingId } } },
+    };
+
+    const first = await request(app)
+      .post('/api/payments/webhook')
+      .set('Content-Type', 'application/json')
+      .set('stripe-signature', 't=1,v1=test')
+      .send(event);
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({ received: true });
+
+    const second = await request(app)
+      .post('/api/payments/webhook')
+      .set('Content-Type', 'application/json')
+      .set('stripe-signature', 't=1,v1=test')
+      .send(event);
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ received: true, duplicate: true });
+
+    // Booking should be confirmed and not changed beyond that
+    const updated = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(updated?.status).toBe('confirmed');
   });
 
   afterAll(async () => {
@@ -184,6 +233,28 @@ describe('Celebrate API', () => {
     const res = await request(app).get('/api/venues');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.items)).toBe(true);
+  });
+
+  it('GET /api/venues pagination & sorting returns metadata and applies order', async () => {
+    // Seed two venues in known order
+    const ownerLogin = await request(app).post('/api/auth/login').send({ email: 'owner.meta@example.com' });
+    const ownerId = ownerLogin.body.user.id as string;
+    const ownerToken = jwt.sign({ sub: ownerId, role: 'owner', name: 'OwnerMeta' }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '1h' });
+    const v1 = await request(app).post('/api/venues').set('Authorization', `Bearer ${ownerToken}`).send({ name: 'A Venue', description: 'd', city: 'L', country: 'UK', capacity: 10, basePrice: 100, images: [], amenities: [], eventTypes: [] });
+    const v2 = await request(app).post('/api/venues').set('Authorization', `Bearer ${ownerToken}`).send({ name: 'Z Venue', description: 'd', city: 'L', country: 'UK', capacity: 10, basePrice: 100, images: [], amenities: [], eventTypes: [] });
+    expect(v1.status).toBe(201); expect(v2.status).toBe(201);
+
+    const page1 = await request(app).get('/api/venues?page=1&pageSize=1&sort=name');
+    expect(page1.status).toBe(200);
+    expect(page1.body.page).toBe(1);
+    expect(page1.body.pageSize).toBe(1);
+    expect(typeof page1.body.total).toBe('number');
+    expect(typeof page1.body.totalPages).toBe('number');
+    expect(page1.body.items[0].name).toBe('A Venue');
+
+    const page2desc = await request(app).get('/api/venues?page=1&pageSize=1&sort=-name');
+    expect(page2desc.status).toBe(200);
+    expect(page2desc.body.items[0].name).toBe('Z Venue');
   });
 
   it('GET /api/bookings/me without auth -> 401', async () => {

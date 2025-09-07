@@ -52,3 +52,10 @@ model Booking {
   user  User  @relation(fields: [userId], references: [id])
   venue Venue @relation(fields: [venueId], references: [id])
 }
+
+/// Tracks processed third-party webhook events (e.g., Stripe) to ensure idempotency
+model ProcessedEvent {
+  id        String   @id @default(cuid())
+  eventId   String   @unique
+  createdAt DateTime @default(now())
+}

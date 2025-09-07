@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import fs from 'fs';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -33,6 +35,32 @@ const app = express();
 app.use(helmet());
 // NOTE: JSON parser is added AFTER the Stripe webhook so that the webhook can use raw body
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)), credentials: true }));
+
+// Standardized error helpers
+function err(res: any, status: number, code: string, message: string, details?: any) {
+  const body: any = { error: { code, message } };
+  if (details !== undefined) body.error.details = details;
+  return res.status(status).json(body);
+}
+const badRequest = (res: any, code: string, message: string, details?: any) => err(res, 400, code, message, details);
+const unauthorized = (res: any, message = 'Unauthorized') => err(res, 401, 'unauthorized', message);
+const forbidden = (res: any, message = 'Forbidden') => err(res, 403, 'forbidden', message);
+const notFound = (res: any, message = 'Not found') => err(res, 404, 'not_found', message);
+const internalError = (res: any, message = 'Internal server error') => err(res, 500, 'internal_error', message);
+
+// Minimal structured logger
+function logInfo(msg: string, ctx?: Record<string, any>) {
+  if (ctx) console.log(JSON.stringify({ level: 'info', msg, ...ctx }));
+  else console.log(JSON.stringify({ level: 'info', msg }));
+}
+function logWarn(msg: string, ctx?: Record<string, any>) {
+  if (ctx) console.warn(JSON.stringify({ level: 'warn', msg, ...ctx }));
+  else console.warn(JSON.stringify({ level: 'warn', msg }));
+}
+function logError(msg: string, ctx?: Record<string, any>) {
+  if (ctx) console.error(JSON.stringify({ level: 'error', msg, ...ctx }));
+  else console.error(JSON.stringify({ level: 'error', msg }));
+}
 
 // Rate limiters
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
@@ -112,8 +140,19 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, secret);
     } catch (err: any) {
-      console.error('Webhook signature verification failed', err?.message);
-      return res.status(400).json({ error: `Webhook Error: ${err?.message || 'invalid signature'}` });
+      logWarn('webhook signature verification failed', { error: err?.message });
+      return badRequest(res, 'webhook_invalid_signature', `Webhook Error: ${err?.message || 'invalid signature'}`);
+    }
+
+    // Idempotency: ignore already processed event IDs
+    const eid = (event as any)?.id as string | undefined;
+    if (!eid) {
+      return badRequest(res, 'webhook_missing_event_id', 'Missing event id');
+    }
+    const seen = await prisma.processedEvent.findUnique({ where: { eventId: eid } }).catch(() => null);
+    if (seen) {
+      logInfo('webhook event already processed; ignoring', { eventId: eid, type: event.type });
+      return res.json({ received: true, duplicate: true });
     }
 
     switch (event.type) {
@@ -122,9 +161,7 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
         const bookingId = (pi?.metadata?.bookingId
           || pi?.metadata?.booking_id
           || pi?.bookingId) as string | undefined;
-        if (process.env.NODE_ENV === 'test') {
-          console.debug('[webhook] payment_intent.succeeded meta bookingId=', bookingId);
-        }
+        logInfo('webhook payment_intent.succeeded', { eventId: eid, bookingId });
         if (bookingId) {
           await prisma.booking.update({ where: { id: bookingId }, data: { status: 'confirmed' } }).catch(() => {});
         }
@@ -135,9 +172,7 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
         const bookingId = (pi?.metadata?.bookingId
           || pi?.metadata?.booking_id
           || pi?.bookingId) as string | undefined;
-        if (process.env.NODE_ENV === 'test') {
-          console.debug('[webhook] payment_intent.payment_failed meta bookingId=', bookingId);
-        }
+        logInfo('webhook payment_intent.payment_failed', { eventId: eid, bookingId });
         if (bookingId) {
           await prisma.booking.update({ where: { id: bookingId }, data: { status: 'failed' } }).catch(() => {});
         }
@@ -147,10 +182,12 @@ app.post('/api/payments/webhook', webhookLimiter, express.raw({ type: 'applicati
         // no-op for other events
         break;
     }
+    // Mark processed after successful handling
+    await prisma.processedEvent.create({ data: { eventId: eid } }).catch(() => {});
     res.json({ received: true });
   } catch (e) {
-    console.error('Webhook handler error', e);
-    res.status(500).json({ error: 'Webhook handler error' });
+    logError('webhook handler error', { error: (e as any)?.message });
+    internalError(res, 'Webhook handler error');
   }
 });
 
@@ -160,6 +197,54 @@ app.use(express.json());
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// OpenAPI spec + Swagger UI (no extra deps; uses CDN)
+app.get('/api/openapi.yaml', (_req, res) => {
+  const override = process.env.OPENAPI_SPEC_PATH;
+  let candidates: string[] = [];
+  if (override && override.trim().length > 0) {
+    candidates.push(path.resolve(override));
+  }
+  // ts-node (backend/src)
+  candidates.push(path.resolve(__dirname, '../../docs/openapi.yaml'));
+  // compiled (backend/dist/src)
+  candidates.push(path.resolve(__dirname, '../../../docs/openapi.yaml'));
+
+  const chosen = candidates.find((p) => {
+    try { return fs.existsSync(p); } catch { return false; }
+  });
+  if (!chosen) {
+    return res.status(404).json({ error: { code: 'not_found', message: 'OpenAPI spec not found' } });
+  }
+  res.sendFile(chosen);
+});
+app.get('/api/docs', (_req, res) => {
+  const html = `<!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Celebrate API Docs</title>
+      <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+      <style> body { margin: 0; } #swagger-ui { max-width: 100%; } </style>
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+      <script>
+        window.ui = SwaggerUIBundle({
+          url: '/api/openapi.yaml',
+          dom_id: '#swagger-ui',
+          presets: [SwaggerUIBundle.presets.apis],
+        });
+      </script>
+    </body>
+  </html>`;
+  // Relaxed CSP for Swagger UI (allow CDN + minimal inline)
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' https: 'unsafe-inline'; script-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(html);
+});
 
 // Root info
 app.get('/', (_req, res) => {
@@ -189,7 +274,7 @@ app.get('/api/auth/me', auth(['user','owner','admin']), async (req: any, res) =>
   res.json({ user: { id: sub, role, name } });
 });
 
-// Venues search/filter with validated query params
+// Venues search/filter with validated query params (now with pagination & sorting)
 const asOptionalNonEmpty = (schema: z.ZodTypeAny) => z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
 const VenueQuerySchema = z.object({
   city: asOptionalNonEmpty(z.string().min(1)),
@@ -198,21 +283,46 @@ const VenueQuerySchema = z.object({
   maxCap: z.coerce.number().int().nonnegative().optional(),
   amenity: asOptionalNonEmpty(z.string().min(1)),
   eventType: asOptionalNonEmpty(z.string().min(1)),
+  page: z.coerce.number().int().min(1).default(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20).optional(),
+  sort: asOptionalNonEmpty(z.string().min(1)), // e.g., name | -name | city | -createdAt
 });
 app.get('/api/venues', async (req, res) => {
   const parsed = VenueQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'Invalid query parameters', details: parsed.error.flatten() });
+    return badRequest(res, 'invalid_query', 'Invalid query parameters', parsed.error.flatten());
   }
   const { city, q, minCap, maxCap, amenity, eventType } = parsed.data;
+  const page = parsed.data.page ?? 1;
+  const pageSize = parsed.data.pageSize ?? 20;
+  const sort = parsed.data.sort;
+
   const where: any = { isDeleted: false };
   if (minCap !== undefined || maxCap !== undefined) {
     where.capacity = { gte: minCap ?? undefined, lte: maxCap ?? undefined };
   }
-  const venues = (await prisma.venue.findMany({ where: where as any })).map(hydrateVenue);
+
+  // Build orderBy from sort string
+  let orderBy: any = undefined;
+  if (sort) {
+    const desc = sort.startsWith('-');
+    const key = desc ? sort.slice(1) : sort;
+    const allowed = new Set(['name', 'city', 'createdAt', 'basePrice', 'rating', 'capacity']);
+    if (allowed.has(key)) {
+      orderBy = { [key]: desc ? 'desc' : 'asc' } as any;
+    }
+  }
+
+  // Fetch from DB, then apply amenity/eventType filters in-memory (arrays are stringified in DB)
+  const skip = (page - 1) * pageSize;
+  const [rows, total] = await Promise.all([
+    prisma.venue.findMany({ where: where as any, orderBy, skip, take: pageSize }),
+    prisma.venue.count({ where: where as any }),
+  ]);
   const cityLc = city ? city.toLowerCase() : null;
   const qLc = q ? q.toLowerCase() : null;
-  const filtered = venues.filter((v: any) => {
+  const hydrated = rows.map(hydrateVenue);
+  const filtered = hydrated.filter((v: any) => {
     const vCity = (v.city || '').toString().toLowerCase();
     const vName = (v.name || '').toString().toLowerCase();
     if (cityLc && vCity !== cityLc) return false;
@@ -223,12 +333,14 @@ app.get('/api/venues', async (req, res) => {
     if (eventType && !e.includes(String(eventType))) return false;
     return true;
   });
-  res.json({ items: filtered.map(hydrateVenue) });
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  res.json({ items: filtered, page, pageSize, total, totalPages });
 });
 
 app.get('/api/venues/:id', async (req, res) => {
   const row = await prisma.venue.findFirst({ where: { id: req.params.id, isDeleted: false } as any });
-  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (!row) return notFound(res);
   const v = hydrateVenue(row as any);
   return res.json(v);
 });
@@ -237,7 +349,7 @@ app.get('/api/venues/:id', async (req, res) => {
 app.post('/api/venues', auth(['owner','admin']), async (req: any, res) => {
   const parsed = VenueCreateSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+    return badRequest(res, 'invalid_request', 'Invalid request', parsed.error.flatten());
   }
   try {
     // ...
@@ -245,7 +357,7 @@ app.post('/api/venues', auth(['owner','admin']), async (req: any, res) => {
     const b = parsed.data;
     // Ensure owner exists to satisfy FK when token is minted externally (E2E)
     const ownerId = req.user?.sub as string | undefined;
-    if (!ownerId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!ownerId) return unauthorized(res);
     const existingOwner = await prisma.user.findUnique({ where: { id: ownerId } });
     if (!existingOwner) {
       await prisma.user.create({
@@ -273,8 +385,8 @@ app.post('/api/venues', auth(['owner','admin']), async (req: any, res) => {
     }});
     return res.status(201).json(hydrateVenue(created as any));
   } catch (e: any) {
-    console.error('Create venue error', e);
-    return res.status(500).json({ error: 'Failed to create venue' });
+    logError('Create venue error', { error: (e as any)?.message });
+    return internalError(res, 'Failed to create venue');
   }
 });
 
@@ -283,11 +395,11 @@ app.put('/api/venues/:id', auth(['owner','admin']), async (req: any, res) => {
   try {
     const id = req.params.id;
     const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return notFound(res);
     // ...
     const parsed = VenueCreateSchema.partial().safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      return badRequest(res, 'invalid_request', 'Invalid request', parsed.error.flatten());
     }
     const b = parsed.data as any;
     const updated = await prisma.venue.update({ where: { id }, data: {
@@ -303,8 +415,8 @@ app.put('/api/venues/:id', auth(['owner','admin']), async (req: any, res) => {
     }});
     return res.json(hydrateVenue(updated as any));
   } catch (e) {
-    console.error('Update venue error', e);
-    return res.status(500).json({ error: 'Failed to update venue' });
+    logError('Update venue error', { error: (e as any)?.message });
+    return internalError(res, 'Failed to update venue');
   }
 });
 
@@ -312,51 +424,39 @@ app.put('/api/venues/:id', auth(['owner','admin']), async (req: any, res) => {
 app.post('/api/bookings', auth(['user','admin']), async (req: any, res) => {
   const parsed = BookingCreateSchema.safeParse(req.body);
   if (!parsed.success) {
-    if (process.env.NODE_ENV === 'test') {
-      console.debug('[bookings] invalid request body', { body: req.body, issues: parsed.error?.issues });
-    }
-    return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+    logWarn('bookings invalid request body', { body: req.body, issues: parsed.error?.issues });
+    return badRequest(res, 'invalid_request', 'Invalid request', parsed.error.flatten());
   }
   const { venueId, date, guests } = parsed.data;
   // basic guards
   const today = new Date(); today.setHours(0,0,0,0);
   if (date < today) {
-    if (process.env.NODE_ENV === 'test') {
-      console.debug('[bookings] rejected: past date', { date: date.toISOString(), today: today.toISOString() });
-    }
-    return res.status(400).json({ error: 'Date must be today or later' });
+    logInfo('bookings rejected: past date', { date: date.toISOString(), today: today.toISOString() });
+    return badRequest(res, 'invalid_date', 'Date must be today or later');
   }
 
   const venue = await prisma.venue.findUnique({ where: { id: venueId } });
   if (!venue) {
-    if (process.env.NODE_ENV === 'test') {
-      console.debug('[bookings] rejected: invalid venue', { venueId });
-    }
-    return res.status(400).json({ error: 'Invalid venue' });
+    logInfo('bookings rejected: invalid venue', { venueId });
+    return badRequest(res, 'invalid_venue', 'Invalid venue');
   }
   if ((venue as any).capacity && guests > (venue as any).capacity) {
-    if (process.env.NODE_ENV === 'test') {
-      console.debug('[bookings] rejected: guests exceed capacity', { guests, capacity: (venue as any).capacity });
-    }
-    return res.status(400).json({ error: 'Guests exceed capacity' });
+    logInfo('bookings rejected: guests exceed capacity', { guests, capacity: (venue as any).capacity });
+    return badRequest(res, 'capacity_exceeded', 'Guests exceed capacity');
   }
   // prevent double booking for same date (day granularity)
   const isoDay = date.toISOString().slice(0,10);
   const exists = await prisma.booking.findFirst({ where: { venueId, date: { gte: new Date(isoDay), lt: new Date(new Date(isoDay).getTime() + 24*60*60*1000) } } });
   if (exists) {
-    if (process.env.NODE_ENV === 'test') {
-      console.debug('[bookings] rejected: date already booked', { venueId, isoDay });
-    }
-    return res.status(400).json({ error: 'Date already booked' });
+    logInfo('bookings rejected: date already booked', { venueId, isoDay });
+    return badRequest(res, 'date_already_booked', 'Date already booked');
   }
 
   // Ensure user exists to satisfy FK if token was minted without prior login
   const userId = req.user?.sub as string | undefined;
   if (!userId) {
-    if (process.env.NODE_ENV === 'test') {
-      console.debug('[bookings] rejected: missing userId in token');
-    }
-    return res.status(401).json({ error: 'Unauthorized' });
+    logInfo('bookings rejected: missing userId in token');
+    return unauthorized(res);
   }
   const existingUser = await prisma.user.findUnique({ where: { id: userId } });
   if (!existingUser) {
@@ -383,13 +483,11 @@ app.post('/api/bookings', auth(['user','admin']), async (req: any, res) => {
     res.status(201).json(booking);
   } catch (e: any) {
     if (e?.code === 'P2003') {
-      if (process.env.NODE_ENV === 'test') {
-        console.debug('[bookings] rejected: FK violation', { venueId, userId });
-      }
-      return res.status(400).json({ error: 'Invalid user or venue' });
+      logInfo('bookings rejected: FK violation', { venueId, userId });
+      return badRequest(res, 'invalid_fk', 'Invalid user or venue');
     }
-    console.error('Create booking error', e);
-    return res.status(500).json({ error: 'Failed to create booking' });
+    logError('Create booking error', { error: (e as any)?.message });
+    return internalError(res, 'Failed to create booking');
   }
 });
 
@@ -402,10 +500,10 @@ app.get('/api/bookings/me', auth(['user','admin']), async (req: any, res) => {
 app.post('/api/payments/intent', paymentsLimiter, auth(['user','admin']), async (req: any, res) => {
   try {
     const parsed = PaymentIntentSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+    if (!parsed.success) return badRequest(res, 'invalid_request', 'Invalid request', parsed.error.flatten());
     const { bookingId } = parsed.data;
     const booking = await prisma.booking.findFirst({ where: { id: bookingId, userId: req.user.sub } });
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (!booking) return notFound(res, 'Booking not found');
 
     const amountGBP = booking.totalPriceGBP;
     const amount = Math.round(amountGBP * 100); // pence
@@ -418,17 +516,17 @@ app.post('/api/payments/intent', paymentsLimiter, auth(['user','admin']), async 
     });
     res.json({ clientSecret: intent.client_secret });
   } catch (e: any) {
-    console.error('Create PI error', e);
-    res.status(500).json({ error: 'Failed to create payment intent' });
+    logError('Create PI error', { error: (e as any)?.message });
+    internalError(res, 'Failed to create payment intent');
   }
 });
 
 app.post('/api/payments/confirm', paymentsLimiter, auth(['user','admin']), async (req: any, res) => {
   const parsed = PaymentIntentSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+  if (!parsed.success) return badRequest(res, 'invalid_request', 'Invalid request', parsed.error.flatten());
   const { bookingId } = parsed.data;
   const booking = await prisma.booking.update({ where: { id: bookingId }, data: { status: 'confirmed' } }).catch(() => null);
-  if (!booking || booking.userId !== req.user.sub) return res.status(404).json({ error: 'Booking not found' });
+  if (!booking || booking.userId !== req.user.sub) return notFound(res, 'Booking not found');
   res.json(booking);
 });
 
@@ -442,14 +540,14 @@ app.get('/api/admin/venues', auth(['admin']), async (_req, res) => {
 app.post('/api/admin/venues/:id/approve', auth(['admin']), async (req, res) => {
   const id = req.params.id;
   const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
-  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (!existing) return notFound(res);
   const updated = await prisma.venue.update({ where: { id }, data: { status: 'approved' } as any });
   res.json({ ok: true, item: hydrateVenue(updated as any) });
 });
 app.post('/api/admin/venues/:id/suspend', auth(['admin']), async (req, res) => {
   const id = req.params.id;
   const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
-  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (!existing) return notFound(res);
   const updated = await prisma.venue.update({ where: { id }, data: { status: 'suspended' } as any });
   res.json({ ok: true, item: hydrateVenue(updated as any) });
 });
@@ -458,9 +556,9 @@ app.post('/api/admin/venues/:id/suspend', auth(['admin']), async (req, res) => {
 app.delete('/api/venues/:id', auth(['owner','admin']), async (req: any, res) => {
   const id = req.params.id;
   const existing = await prisma.venue.findFirst({ where: { id, isDeleted: false } as any });
-  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (!existing) return notFound(res);
   if (req.user?.role !== 'admin' && existing.ownerId !== req.user?.sub) {
-    return res.status(403).json({ error: 'Forbidden' });
+    return forbidden(res);
   }
   const updated = await prisma.venue.update({ where: { id }, data: { isDeleted: true } as any });
   res.json({ ok: true, item: hydrateVenue(updated as any) });
