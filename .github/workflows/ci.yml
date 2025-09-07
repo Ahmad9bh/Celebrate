@@ -169,6 +169,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Debug repository state
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Commit: ${GITHUB_SHA}"
+          pwd
+          ls -la
+          echo "--- docs/ ---"; ls -la docs || true
+          echo "--- scripts/ ---"; ls -la scripts || true
+          test -f docs/openapi.yaml && echo "Spec found: docs/openapi.yaml" || { echo "ERROR: docs/openapi.yaml missing"; exit 1; }
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -177,7 +188,7 @@ jobs:
       - name: Generate API docs (inline Swagger UI)
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           mkdir -p docs/site
           cp docs/openapi.yaml docs/site/openapi.yaml
           cat > docs/site/index.html <<'HTML'
@@ -203,6 +214,13 @@ jobs:
             </body>
           </html>
           HTML
+          echo "Index preview (first 20 lines):"
+          head -n 20 docs/site/index.html
+          echo "Spec preview (first 20 lines):"
+          head -n 20 docs/site/openapi.yaml
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
