@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - '**'
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - '**'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -156,7 +159,7 @@ jobs:
           retention-days: 7
 
   publish-api-docs:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: [backend-tests, e2e-frontend]
     runs-on: ubuntu-latest
     permissions:
