@@ -16,40 +16,30 @@ permissions:
 
 jobs:
   migrations:
+  publish-api-docs:
+    if: github.event_name == 'push' # or broaden as needed
+    needs: [backend-tests, e2e-frontend]
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Show repo root contents (debug)
+      - name: Debug repository state
+        shell: bash
         run: |
+          set -euxo pipefail
+          echo "Commit: ${GITHUB_SHA}"
           pwd
           ls -la
-          echo "--- backend/ ---"
-          ls -la backend
-          echo "--- backend/prisma/ ---"
-          ls -la backend/prisma || true
-
-      - name: Install backend dependencies (workspace)
-        run: npm ci --workspace backend --include-workspace-root
-
-      - name: Check DATABASE_URL provided
-        run: |
-          if [ -z "${{ secrets.PG_TEST_DATABASE_URL }}" ]; then
-            echo "PG_TEST_DATABASE_URL is not set in repo secrets."
-            exit 1
-          fi
-          if [ -z "${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}" ]; then
-            echo "PG_TEST_DIRECT_DATABASE_URL is not set in repo secrets."
-            exit 1
-          fi
-
+          echo "--- docs/ ---"; ls -la docs || true
+          echo "--- scripts/ ---"; ls -la scripts || true
+          test -f docs/openapi.yaml && echo "Spec found: docs/openapi.yaml" || { echo "ERROR: docs/openapi.yaml missing"; exit 1; 
       - name: Run Prisma migrations (deploy)
         working-directory: backend
         env:
@@ -71,19 +61,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Use Node.js 20
+
+      - name: Setup Node.js
+
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
-      - name: Install dependencies (workspaces)
-        run: npm ci
-
-      - name: Prisma sanity (ensure schema + list tables)
-        working-directory: backend
-        env:
-          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
-          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+      - name: Generate API docs (inline Swagger UI)
+        shell: bash
         run: |
           echo "Database URL diagnostics (sanity):"
           node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
@@ -233,3 +219,46 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+          set -euxo pipefail
+          mkdir -p docs/site
+          cp docs/openapi.yaml docs/site/openapi.yaml
+          cat > docs/site/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>Celebrate API Docs</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+              <style> body { margin: 0; } #swagger-ui { max-width: 100%; } </style>
+            </head>
+            <body>
+              <div id="swagger-ui"></div>
+              <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+              <script>
+                window.ui = SwaggerUIBundle({
+                  url: './openapi.yaml',
+                  dom_id: '#swagger-ui',
+                  presets: [SwaggerUIBundle.presets.apis],
+                });
+              </script>
+            </body>
+          </html>
+          HTML
+          echo "Index preview (first 20 lines):"
+          head -n 20 docs/site/index.html
+          echo "Spec preview (first 20 lines):"
+          head -n 20 docs/site/openapi.yaml
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+

@@ -1,3 +1,4 @@
+
 # Celebrate
 
 [![Phase 1 — Backend APIs](https://img.shields.io/badge/Project-Phase%201%20%E2%80%94%20Backend%20APIs-1f6feb?logo=github)](https://github.com/users/Ahmad9bh/projects/1)
@@ -410,5 +411,82 @@ PowerShell tips:
   # quick reset via db push (no migrate history)
   npm run ci:db:push
   ```
- 
+
  
+ 
+
+  publish-api-docs:
+    if: github.event_name == 'push'
+    needs: [backend-tests, e2e-frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Debug repository state
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Commit: ${GITHUB_SHA}"
+          pwd
+          ls -la
+          echo "--- docs/ ---"; ls -la docs || true
+          echo "--- scripts/ ---"; ls -la scripts || true
+          test -f docs/openapi.yaml && echo "Spec found: docs/openapi.yaml" || { echo "ERROR: docs/openapi.yaml missing"; exit 1; }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate API docs (inline Swagger UI)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p docs/site
+          cp docs/openapi.yaml docs/site/openapi.yaml
+          cat > docs/site/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>Celebrate API Docs</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+              <style> body { margin: 0; } #swagger-ui { max-width: 100%; } </style>
+            </head>
+            <body>
+              <div id="swagger-ui"></div>
+              <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+              <script>
+                window.ui = SwaggerUIBundle({
+                  url: './openapi.yaml',
+                  dom_id: '#swagger-ui',
+                  presets: [SwaggerUIBundle.presets.apis],
+                });
+              </script>
+            </body>
+          </html>
+          HTML
+          echo "Index preview (first 20 lines):"
+          head -n 20 docs/site/index.html
+          echo "Spec preview (first 20 lines):"
+          head -n 20 docs/site/openapi.yaml
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
