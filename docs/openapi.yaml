@@ -5,9 +5,12 @@ info:
   description: REST API for venues, bookings, and payments.
 servers:
   - url: http://localhost:4000
+security:
+  - bearerAuth: []
 paths:
   /api/health:
     get:
+      security: []
       summary: Health check
       responses:
         '200':
@@ -21,6 +24,7 @@ paths:
                     type: boolean
   /api/auth/login:
     post:
+      security: []
       summary: Mock login
       requestBody:
         required: true
@@ -47,6 +51,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
   /api/venues:
     get:
+      security: []
       summary: List venues
       parameters:
         - in: query
@@ -94,6 +99,7 @@ paths:
                   totalPages: { type: integer }
   /api/venues/{id}:
     get:
+      security: []
       summary: Get venue
       parameters:
         - in: path
