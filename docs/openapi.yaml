@@ -3,8 +3,12 @@ info:
   title: Celebrate API
   version: 0.1.1
   description: REST API for venues, bookings, and payments.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 servers:
-  - url: http://localhost:4000
+  - url: https://api.celebrate.app
+    description: Production API
 security:
   - bearerAuth: []
 paths:
