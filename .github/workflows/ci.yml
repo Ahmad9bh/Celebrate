@@ -1,5 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  migrations:
   publish-api-docs:
     if: github.event_name == 'push' # or broaden as needed
+    needs: [backend-tests, e2e-frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Debug repository state
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Commit: ${GITHUB_SHA}"
+          pwd
+          ls -la
+          echo "--- docs/ ---"; ls -la docs || true
+          echo "--- scripts/ ---"; ls -la scripts || true
+          test -f docs/openapi.yaml && echo "Spec found: docs/openapi.yaml" || { echo "ERROR: docs/openapi.yaml missing"; exit 1; 
+      - name: Run Prisma migrations (deploy)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}
+        run: |
+          echo "Database URL diagnostics (migrations):"
+          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
+          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}"
+          pwd
+          test -f prisma/schema.prisma && echo "Found prisma/schema.prisma" || (echo "schema.prisma not found" && ls -la && ls -la prisma && exit 1)
+          npx -y prisma@5.22.0 db push --force-reset --skip-generate --schema prisma/schema.prisma
+
+  backend-tests:
+    needs: [migrations]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+
+      - name: Setup Node.js
+
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate API docs (inline Swagger UI)
+        shell: bash
+        run: |
+          echo "Database URL diagnostics (sanity):"
+          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
+          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}"
+          npx -y prisma@5.22.0 migrate status --schema prisma/schema.prisma || true
+          npx -y prisma@5.22.0 db push --skip-generate --schema prisma/schema.prisma
+          npm i -D pg@8
+          node -e "(async()=>{const {Client}=require('pg');const u=process.env.DATABASE_URL;const c=new Client({connectionString:u});await c.connect();const r=await c.query(\"select table_schema,table_name from information_schema.tables where table_schema='public' order by 1,2\");console.log('Tables:',r.rows);await c.end();})().catch(e=>{console.error(e);process.exit(1);});"
+
+      - name: Run tests
+        env:
+          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=bt_${{ github.run_id }}
+          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}&schema=bt_${{ github.run_id }}_shadow
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=bt_${{ github.run_id }}
+        run: |
+          echo "Database URL diagnostics (backend tests):"
+          node -e "try{const u=new URL(process.env.DATABASE_URL);console.log('DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DATABASE_URL invalid')}"
+          node -e "try{const u=new URL(process.env.DIRECT_DATABASE_URL);console.log('DIRECT_DATABASE_URL host:',u.hostname,'params:',u.searchParams.toString());}catch(e){console.log('DIRECT_DATABASE_URL invalid')}"
+          npm test
+
+  e2e-frontend:
+    needs: [migrations]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies (workspaces)
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests (starts servers automatically)
+        env:
+          DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=e2e_${{ github.run_id }}
+          SHADOW_DATABASE_URL: ${{ secrets.PG_TEST_SHADOW_DATABASE_URL }}&schema=e2e_${{ github.run_id }}_shadow
+          DIRECT_DATABASE_URL: ${{ secrets.PG_TEST_DIRECT_DATABASE_URL }}&schema=e2e_${{ github.run_id }}
+          NODE_ENV: test
+          PRISMA_IGNORE_ENV_FILES: "1"
+          NEXT_TELEMETRY_DISABLED: "1"
+          JWT_SECRET: dev-secret
+          USE_MOCK_STRIPE: "1"
+          STRIPE_WEBHOOK_SECRET: whsec_mock
+          NEXT_PUBLIC_API_BASE: http://localhost:4000
+          NEXT_PUBLIC_DISABLE_PAYMENTS: "1"
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_dummy
+          ALLOWED_ORIGINS: http://localhost:3000
+        run: npm run test:e2e
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Playwright raw test-results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish-api-docs:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [backend-tests, e2e-frontend]
     runs-on: ubuntu-latest
     permissions:
@@ -73,3 +219,46 @@
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+          set -euxo pipefail
+          mkdir -p docs/site
+          cp docs/openapi.yaml docs/site/openapi.yaml
+          cat > docs/site/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>Celebrate API Docs</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+              <style> body { margin: 0; } #swagger-ui { max-width: 100%; } </style>
+            </head>
+            <body>
+              <div id="swagger-ui"></div>
+              <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+              <script>
+                window.ui = SwaggerUIBundle({
+                  url: './openapi.yaml',
+                  dom_id: '#swagger-ui',
+                  presets: [SwaggerUIBundle.presets.apis],
+                });
+              </script>
+            </body>
+          </html>
+          HTML
+          echo "Index preview (first 20 lines):"
+          head -n 20 docs/site/index.html
+          echo "Spec preview (first 20 lines):"
+          head -n 20 docs/site/openapi.yaml
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
