@@ -231,6 +231,19 @@ Set these in GitHub → Settings → Secrets and variables → Actions:
 
 Prisma versioning: CI currently pins `prisma@5.22.0`. Ignore local upgrade prompts to v6 until we coordinate a repo-wide upgrade.
 
+## Local docs generation
+
+If you want to preview the API docs locally without GitHub Actions:
+
+```powershell
+# From repo root (Windows PowerShell)
+scripts/generate-api-docs.ps1 -SourceSpec "docs/openapi.yaml" -OutDir "docs/site"
+```
+
+This copies `docs/openapi.yaml` to `docs/site/openapi.yaml` and creates `docs/site/index.html` with Swagger UI. Then open `docs/site/index.html` in your browser.
+
+Note: CI uses an inline generator in `publish-api-docs` within `.github/workflows/ci.yml` and does not call this script. The script is a convenience for local development only.
+
 ## Health Endpoints
 
 The backend exposes two health endpoints for convenience:

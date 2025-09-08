@@ -156,6 +156,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Note: CI generates Swagger UI inline. The PowerShell helper at
+  # scripts/generate-api-docs.ps1 is for local use only and is not used by CI.
   publish-api-docs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [backend-tests, e2e-frontend]
