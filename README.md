@@ -244,6 +244,7 @@ This copies `docs/openapi.yaml` to `docs/site/openapi.yaml` and creates `docs/si
 
 Note: CI uses an inline generator in `publish-api-docs` within `.github/workflows/ci.yml` and does not call this script. The script is a convenience for local development only.
 
+
 On macOS/Linux:
 
 ```bash
@@ -251,6 +252,7 @@ On macOS/Linux:
 chmod +x scripts/generate-api-docs.sh
 scripts/generate-api-docs.sh -s docs/openapi.yaml -o docs/site
 ```
+
 
 ## Health Endpoints
 
