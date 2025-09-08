@@ -3,11 +3,19 @@ info:
   title: Celebrate API
   version: 0.1.1
   description: REST API for venues, bookings, and payments.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 servers:
-  - url: http://localhost:4000
+  - url: https://api.celebrate.app
+    description: Production API
+security:
+  - bearerAuth: []
 paths:
   /api/health:
     get:
+      security: []
+      operationId: healthCheck
       summary: Health check
       responses:
         '200':
@@ -19,8 +27,11 @@ paths:
                 properties:
                   ok:
                     type: boolean
+        '400': { $ref: '#/components/responses/BadRequest' }
   /api/auth/login:
     post:
+      security: []
+      operationId: authLogin
       summary: Mock login
       requestBody:
         required: true
@@ -47,6 +58,8 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
   /api/venues:
     get:
+      security: []
+      operationId: listVenues
       summary: List venues
       parameters:
         - in: query
@@ -92,8 +105,11 @@ paths:
                   pageSize: { type: integer }
                   total: { type: integer }
                   totalPages: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /api/venues/{id}:
     get:
+      security: []
+      operationId: getVenue
       summary: Get venue
       parameters:
         - in: path
@@ -110,6 +126,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
   /api/bookings:
     post:
+      operationId: createBooking
       summary: Create booking
       security: [{ bearerAuth: [] }]
       requestBody:
@@ -133,6 +150,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/bookings/me:
     get:
+      operationId: listMyBookings
       summary: List my bookings
       security: [{ bearerAuth: [] }]
       responses:
@@ -149,6 +167,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/payments/intent:
     post:
+      operationId: createPaymentIntent
       summary: Create payment intent
       security: [{ bearerAuth: [] }]
       requestBody:
@@ -174,6 +193,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/admin/venues:
     get:
+      operationId: adminListVenues
       summary: Admin list venues
       security: [{ bearerAuth: [] }]
       responses:
