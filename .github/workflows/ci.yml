@@ -13,7 +13,22 @@ permissions:
   id-token: write
 
 jobs:
+  lint-openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lint OpenAPI spec with Redocly
+        run: npx -y @redocly/cli@latest lint docs/openapi.yaml
+
   migrations:
+    needs: [lint-openapi]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
