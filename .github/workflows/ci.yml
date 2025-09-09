@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  schedule:
+    # Nightly at 02:00 UTC to lint OpenAPI and links even without code changes
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -40,7 +43,11 @@ jobs:
           args: >-
             --verbose --no-progress --exclude-mail --max-redirects 5 --timeout 20
             "**/*.md" "docs/**/*.yaml"
+
+          fail: true
+
           fail: false
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
