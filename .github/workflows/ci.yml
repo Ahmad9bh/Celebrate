@@ -15,6 +15,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-openapi:
     runs-on: ubuntu-latest
@@ -42,7 +46,7 @@ jobs:
           # Scan all Markdown and YAML under repo; be verbose; don't fail the build
           args: >-
             --verbose --no-progress --exclude-mail --max-redirects 5 --timeout 20
-            --retry 2 --retry-wait 2 --exclude-file .lycheeignore
+            --retry-attempts 2 --retry-wait-time 2 --exclude-file .lycheeignore
             "**/*.md" "docs/**/*.yaml"
           fail: true
         env:
