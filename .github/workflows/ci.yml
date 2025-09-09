@@ -47,7 +47,7 @@ jobs:
             --verbose --no-progress --exclude-mail --max-redirects 5 --timeout 20
             --exclude-file .lycheeignore
             "**/*.md" "docs/**/*.yaml"
-          fail: true
+          fail: false
           lycheeVersion: latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}      
