@@ -40,17 +40,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check links (README and docs)
+      - name: Check links (README and docs) – (no “warn only”)
         uses: lycheeverse/lychee-action@v1
         with:
+          # Scan all Markdown and YAML under repo; be verbose; don't fail the build
           args: >-
             --verbose --no-progress --exclude-mail --max-redirects 5 --timeout 20
-            --exclude-file .lycheeignore
+            --retry 2 --retry-wait 2 --exclude-file .lycheeignore
+            lycheeVersion: latest
             "**/*.md" "docs/**/*.yaml"
-          fail: false
-          lycheeVersion: latest
+          fail: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}      
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   migrations:
     needs: [lint-openapi, lint-links]
