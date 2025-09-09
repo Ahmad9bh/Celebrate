@@ -43,6 +43,7 @@ jobs:
           args: >-
             --verbose --no-progress --exclude-mail --max-redirects 5 --timeout 20
             --retry 2 --retry-wait 2 --exclude-file .lycheeignore
+            lycheeVersion: latest
             "**/*.md" "docs/**/*.yaml"
           fail: true
         env:
