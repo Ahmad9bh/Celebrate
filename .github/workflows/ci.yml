@@ -36,7 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check links (README and docs) – warn only
+      - name: Check links (README and docs) – (no “warn only”)
         uses: lycheeverse/lychee-action@v1
         with:
           # Scan all Markdown and YAML under repo; be verbose; don't fail the build
