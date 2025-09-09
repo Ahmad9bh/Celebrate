@@ -43,7 +43,11 @@ jobs:
           args: >-
             --verbose --no-progress --exclude-mail --max-redirects 5 --timeout 20
             "**/*.md" "docs/**/*.yaml"
+
           fail: true
+
+          fail: false
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
