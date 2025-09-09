@@ -46,13 +46,6 @@ jobs:
             --retry 2 --retry-wait 2 --exclude-file .lycheeignore
             "**/*.md" "docs/**/*.yaml"
           fail: true
-
-            "**/*.md" "docs/**/*.yaml"
-
-          fail: true
-
-          fail: false
-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
