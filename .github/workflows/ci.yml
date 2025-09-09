@@ -42,6 +42,7 @@ jobs:
           # Scan all Markdown and YAML under repo; be verbose; don't fail the build
           args: >-
             --verbose --no-progress --exclude-mail --max-redirects 5 --timeout 20
+            --retry 2 --retry-wait 2 --exclude-file .lycheeignore
             "**/*.md" "docs/**/*.yaml"
           fail: true
         env:
